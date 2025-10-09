@@ -1,0 +1,11 @@
+icici/
+logs/
+myenv/
+__pycache__/
+.env 
+NSEScripMaster.csv
+NSEScripMaster.txt
+icici.zip 
+ICICIFULL.csv
+breeze_.py
+.streamlit/
