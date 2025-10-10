@@ -21,6 +21,8 @@ st.session_state.setdefault("num_conditions", 0)
 st.session_state.setdefault("config_loaded", False)
 st.session_state.setdefault("file_name", "nofile")
 st.session_state.setdefault("indicator_configs", [])
+st.session_state.setdefault("connectors", [])
+st.session_state.setdefault("cond_specs", [])
 # if st.session_state.num_indicators 
     # ---------- Rest of your code continues unchanged ----------
 for i in range(st.session_state.num_indicators):
@@ -255,24 +257,25 @@ for i in range(int(st.session_state.num_indicators)):
             
             macd_params = {"fastperiod": fast, "slowperiod": slow, "signalperiod": signal, "color_hist": color_hist, "color_signal": color_signal, "color_line": color_line}
         options = ["Same as Chart"] + interval_labels
-        tf_value = f"tf_{i}"
+        tf_value = st.session_state.get(f"tf_{i}")
         for (k, v) in interval_map.items():
             if (v == tf_value):
                     option = k
         else:
             option = options[0]
         tf_index = options.index(option) 
-        tf_label = st.selectbox(
+        tf_label1 = st.selectbox(
             "Timeframe (resampled)",
             options,
             index=tf_index,
             key=f"tf_{i}"
         )
-        # print(f'271 {tf_label}')
         tf_label = options[tf_index] 
+        print(f'271 {tf_label} {tf_label1}')
+        
         # Optional: store index separately if you need it later
-        if tf_label in options:
-            st.session_state[f"tf_{i}_index"] = options.index(tf_label)
+        if tf_label1 in options:
+            st.session_state[f"tf_{i}_index"] = options.index(tf_label1)
             tf = interval_map[tf_label] if tf_label != "Same as Chart" else chart_interval
             params_dict = {
                 "type": ind,
@@ -399,14 +402,14 @@ with st.expander("Create conditions (LHS op RHS). RHS can be a number or an indi
     # number of conditions
     num_conditions_input = st.number_input("Number of Conditions", min_value=0, max_value=6, value=st.session_state.get('num_conditions_input'), key="num_conditions_input", on_change=update_num_conditions)
     
-    cond_specs = st.session_state.get("cond_specs", [])
-    connectors = st.session_state.get("connectors", [])
     # cols_for_buttons = st.columns([1, 1, 1, 1, 2])
+    new_cond_specs = []
+    new_connectors = []
     for i in range(int(st.session_state.num_conditions)):
         a, b, c, d, e = st.columns([3,1,3,1,2])
         op_options = [">","<",">=","<=","=="]
         connector_options = ["AND","OR"]
-        rhs_kind_options = ["Indicator/Price","Number"]
+        rhs_kind_options = ["Indicator/Number", "Number"]
         rhs_kind = f'rhs_kind_{i}'
         if rhs_kind: 
             r_kind = 0
@@ -424,15 +427,21 @@ with st.expander("Create conditions (LHS op RHS). RHS can be a number or an indi
             rhs = c.selectbox(f"RHS {i+1}", options=available_cols_cond, index=available_cols_cond.index(st.session_state.get(f'rhs_{i}', available_cols_cond[0])), key=f"rhs_{i}")
             rhs_is_num = False
 
-        cond_specs.append((lhs, op, rhs, rhs_is_num))
+        new_cond_specs.append((lhs, op, rhs, rhs_is_num))
         if i < int(st.session_state.num_conditions)-1:
             connector = e.selectbox(f"Connector {i+1}", options=connector_options, index=connector_options.index(st.session_state.get(f"conn_{i}", connector_options[0])), key=f"conn_{i}")
-            connectors.append(connector)
+            new_connectors.append(connector)
 
     evaluate_btn = st.button("Evaluate Conditions")
+if st.session_state.cond_specs != new_cond_specs:
+    st.session_state.cond_specs = new_cond_specs
 
+if st.session_state.connectors != new_connectors:
+    st.session_state.connectors = new_connectors
+cond_specs = st.session_state.cond_specs
+connectors = st.session_state.connectors = new_connectors
 c_json = {
-    "indicator_conf": indicator_configs,
+    "indicator_conf": st.session_state.indicator_configs,
     "conditions_conf": {
             "conditions": cond_specs,
             "connectors": connectors
@@ -467,7 +476,7 @@ if int(st.session_state.num_conditions) > 0 and evaluate_btn:
             vars_safe[col] = np.zeros(len(data), dtype=float)
 
     masks = []
-    print(st.session_state.cond_specs)
+    print(f'470: {st.session_state.cond_specs}')
     for lhs, op, rhs, rhs_is_num in st.session_state.cond_specs:
         lhs_arr = vars_safe.get(lhs, np.zeros(len(data), dtype=float))
         rhs_arr = np.full(len(lhs_arr), float(rhs)) if rhs_is_num else vars_safe.get(rhs, np.zeros(len(data), dtype=float))
@@ -500,8 +509,8 @@ if int(st.session_state.num_conditions) > 0 and evaluate_btn:
 
 # ---------- Build Plot (price + oscillator subplots) ----------
 # choose oscillator cfgs for separate subplots
-
-oscillator_cfgs = [cfg for cfg in st.session_state.indicator_configs if cfg["type"] in oscillator_set]
+indicator_configs = st.session_state["indicator_configs"]
+oscillator_cfgs = [cfg for cfg in indicator_configs if cfg["type"] in oscillator_set]
 
 rows = 1 + len(oscillator_cfgs)
 if rows == 1:
@@ -558,7 +567,7 @@ for idx, cfg in enumerate(oscillator_cfgs):
     period = cfg.get("period")
     tf = cfg.get("timeframe")
     col_base = f"{ind}_{period}_{tf}" if period is not None else f"{ind}_{tf}"
-
+    color = cfg.get("color")
     if ind == "MACD":
         # line, signal, hist
         if col_base in data.columns:
@@ -581,7 +590,7 @@ for idx, cfg in enumerate(oscillator_cfgs):
     else:
         # single-line oscillators
         if col_base in data.columns:
-            fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.2)), row=row_num, col=1)
+            fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.2, color=color)), row=row_num, col=1)
 
 # finalize layout
 fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False,
