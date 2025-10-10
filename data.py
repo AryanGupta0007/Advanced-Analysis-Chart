@@ -82,8 +82,8 @@ def fetch_one_day(sym, target_date):
     df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
     df = df.dropna(subset=["datetime", "open", "close"])
     df = df.set_index("datetime").sort_index()
-    print(f"one day head: {df.head()}")
-    print(f"one day tail: {df.tail()}")
+    # print(f"one day head: {df.head()}")
+    # print(f"one day tail: {df.tail()}")
     
     return df
 
