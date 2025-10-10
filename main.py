@@ -60,7 +60,8 @@ if uploaded_file is not None:
     file_data = json.load(uploaded_file)
     if (uploaded_file.name != st.session_state.file_name):
         st.session_state["config_loaded"] = False  
-        st.session_state["file_name"] = uploaded_file.name       
+        st.session_state["file_name"] = uploaded_file.name
+        st.session_state["indicator_configs"] = []            
     if st.session_state["config_loaded"] is False:
         # Only process if new file or different file
         # print(file_data)
@@ -139,6 +140,7 @@ if uploaded_file is not None:
 
 # ---------- Sidebar: Chart Settings ----------
 st.sidebar.header("Chart Settings")
+
 symbol = st.sidebar.selectbox("Select Symbol", symbols_tuple)
 st.session_state.setdefault("chart_period", "1d")
 st.session_state.setdefault("chart_interval", "1 Minute")
@@ -258,12 +260,20 @@ for i in range(int(st.session_state.num_indicators)):
             macd_params = {"fastperiod": fast, "slowperiod": slow, "signalperiod": signal, "color_hist": color_hist, "color_signal": color_signal, "color_line": color_line}
         options = ["Same as Chart"] + interval_labels
         tf_value = st.session_state.get(f"tf_{i}")
-        for (k, v) in interval_map.items():
-            if (v == tf_value):
-                    option = k
+        if tf_value != "Same as Chart":
+            if tf_value[-1] == "T" or tf_value[-1] == "H" or tf_value[-1] == "D":
+                for (k, v) in interval_map.items():
+                    if (v == tf_value):
+                            tf_value = k
+              
+            print(f"gooten tf_value {interval_map[tf_value]}")
+            # else:
+            #     option = interval_map[tf_value]
+            tf_index = options.index(tf_value)
+            print(f'269. tf_index: {tf_index}') 
+        
         else:
-            option = options[0]
-        tf_index = options.index(option) 
+            tf_index = 0    
         tf_label1 = st.selectbox(
             "Timeframe (resampled)",
             options,
@@ -299,13 +309,14 @@ computed_cols = []  # exact column names we compute; used for condition dropdown
 oscillator_set = {"RSI","ATR","MACD","ADX","STOCH","CCI","MFI","TRIX","ROC","OBV"}
 
 for cfg in st.session_state.indicator_configs:
+    print(cfg)
     ind = cfg["type"]
     period = cfg.get("period")
     tf = cfg.get("timeframe")
     # unique col base including timeframe so multiple instances are distinct
     col_base = f"{ind}_{period}_{tf}" if period is not None else f"{ind}_{tf}"
     computed_cols.append(col_base)
-
+    print(f"308: {chart_interval}, {tf}")
     # choose the source (resample raw 1-min to indicator timeframe if needed)
     src = data if tf == chart_interval else resample_candles(df, tf)
 
