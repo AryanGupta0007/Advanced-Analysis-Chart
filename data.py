@@ -7,8 +7,10 @@ from breeze_ import *
 EXCHANGE = "NSE"
 
 # Example symbols
-symbols_tuple = ("ADANIENT", "ADANIPORTS", "RELIANCE", "LEMONTREE", "MOIL", "PNB", "NATIONALALUM", "VARDHMAN")
+symbols_tuple = tuple(all_symbols)
+
 symbols = list(symbols_tuple)
+# print(symbols, symbols_tuple)
 
 # connectFeed(SMART_WEB, symbols=symbols)
 

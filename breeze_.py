@@ -5,8 +5,10 @@ import pandas as pd
 # Read the txt file
 # Replace 'delimiter_here' with your actual delimiter, e.g., '\t' for tab, '|' for pipe, ',' for comma
 symbol_df = pd.read_csv('ICICIFULL.csv')
-
-
+# print(symbol_df)
+all_symbols = symbol_df[' "ExchangeCode"'] 
+# print(list(all_symbols))
+# sys.exit()
 breeze = BreezeConnect(api_key=BREEZE_API_KEY)
 print(fr"https://api.icicidirect.com/apiuser/login?api_key={BREEZE_API_KEY}")
 # Obtain your session key from https://api.icicidirect.com/apiuser/login?api_key=YOUR_API_KEY

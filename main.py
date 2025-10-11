@@ -8,8 +8,7 @@ import json
 from data import fetch_historical, resample_candles, symbols_tuple
 import plotly.express as px
 import os
-import traceback 
-
+import traceback  
 default_colors = px.colors.qualitative.Plotly
 
 # ---------- App Layout ----------
