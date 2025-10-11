@@ -14,7 +14,7 @@ default_colors = px.colors.qualitative.Plotly
 # ---------- App Layout ----------
 st.set_page_config(layout="wide", page_title="Advanced Multi-Indicator Chart")
 st.title("Advanced Multi-Indicator Chart")
-
+st.session_state.setdefault("computed_cols", [])
 st.session_state.setdefault("num_indicators", 1)
 st.session_state.setdefault("num_conditions", 0)
 st.session_state.setdefault("config_loaded", False)
@@ -60,7 +60,8 @@ if uploaded_file is not None:
     if (uploaded_file.name != st.session_state.file_name):
         st.session_state["config_loaded"] = False  
         st.session_state["file_name"] = uploaded_file.name
-        st.session_state["indicator_configs"] = []            
+        st.session_state["indicator_configs"] = []
+        st.session_state["computed_cols"] = []            
     if st.session_state["config_loaded"] is False:
         # Only process if new file or different file
         # print(file_data)
@@ -140,7 +141,7 @@ if uploaded_file is not None:
 # ---------- Sidebar: Chart Settings ----------
 st.sidebar.header("Chart Settings")
 
-symbol = st.sidebar.selectbox("Select Symbol", symbols_tuple)
+symbol = st.sidebar.selectbox("Select Symbol", symbols_tuple, index=symbols_tuple.index("ADANIENT"))
 st.session_state.setdefault("chart_period", "1d")
 st.session_state.setdefault("chart_interval", "1 Minute")
 period_options = ["1d", "2d", "5d", "15d"]
@@ -212,6 +213,7 @@ def update_rhs_kind():
 indicator_configs = st.session_state.get("indicator_configs")
 new_configs = []
 for i in range(int(st.session_state.num_indicators)):
+    print(f"215: {indicator_configs} {st.session_state[f"type_{i}"]}")
     exp_key = f"find_expander_{i}"
     # print(f"state while adding indicator settings {st.session_state}")
     
@@ -285,25 +287,29 @@ for i in range(int(st.session_state.num_indicators)):
         # Optional: store index separately if you need it later
         if tf_label1 in options:
             st.session_state[f"tf_{i}_index"] = options.index(tf_label1)
-            tf = interval_map[tf_label] if tf_label != "Same as Chart" else chart_interval
-            params_dict = {
-                "type": ind,
-                "period": period,
-                "timeframe": tf,
-                "bb_params": bb_params,
-                "macd_params": macd_params
-            }
-            if ind in line_indicators:
-                params_dict["color"] = color
-            new_configs.append(params_dict)
+        elif tf_label in options:
+            st.session_state[f"tf_{i}_index"] = options.index(tf_label)
+             
+        tf = interval_map[tf_label] if tf_label != "Same as Chart" else chart_interval
+        params_dict = {
+            "type": ind,
+            "period": period,
+            "timeframe": tf,
+            "bb_params": bb_params,
+            "macd_params": macd_params
+        }
+        if ind in line_indicators:
+            params_dict["color"] = color
+        print(f"params_dict: {params_dict}")
+        new_configs.append(params_dict)
 
 if (new_configs != st.session_state.indicator_configs) and new_configs != []: 
     st.session_state.indicator_configs = new_configs            
-
 indicator_configs = st.session_state.indicator_configs                
+print(f"303: {indicator_configs}")
 # print(f'292: {indicator_configs}, {new_configs}')
 # ---------- Compute Indicators (only for the timeframes user requested) ----------
-computed_cols = []  # exact column names we compute; used for condition dropdowns
+computed_cols = st.session_state.computed_cols  # exact column names we compute; used for condition dropdowns
 # which indicators will get separate subplots
 oscillator_set = {"RSI","ATR","MACD","ADX","STOCH","CCI","MFI","TRIX","ROC","OBV"}
 
@@ -314,7 +320,9 @@ for cfg in st.session_state.indicator_configs:
     tf = cfg.get("timeframe")
     # unique col base including timeframe so multiple instances are distinct
     col_base = f"{ind}_{period}_{tf}" if period is not None else f"{ind}_{tf}"
-    computed_cols.append(col_base)
+    print(f"323: {computed_cols}")
+    if col_base not in computed_cols:
+        st.session_state.computed_cols.append(col_base)
     print(f"308: {chart_interval}, {tf}")
     # choose the source (resample raw 1-min to indicator timeframe if needed)
     src = data if tf == chart_interval else resample_candles(df, tf)
@@ -398,7 +406,7 @@ for cfg in st.session_state.indicator_configs:
             data[c] = src[c].reindex(data.index, method="ffill")
         except Exception:
             data[c] = src[c]
-
+print(f"408 {st.session_state.computed_cols}")
 st.markdown("## 🧩 Condition Builder")
 
 if not "num_conditions_input" in st.session_state: 
@@ -407,7 +415,7 @@ if not "num_conditions_input" in st.session_state:
 
 with st.expander("Create conditions (LHS op RHS). RHS can be a number or an indicator. Default RHS = Price", expanded=True):
     # build dropdown list that contains only the indicators the user added + Price
-    available_cols_cond = ["Price"] + computed_cols
+    available_cols_cond = ["Price"] + st.session_state.computed_cols
 
     # number of conditions
     num_conditions_input = st.number_input("Number of Conditions", min_value=0, max_value=6, value=st.session_state.get('num_conditions_input'), key="num_conditions_input", on_change=update_num_conditions)
