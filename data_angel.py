@@ -1,18 +1,17 @@
 import pandas as pd
 import datetime
 import re
-from breeze_ import *
 from angel_one_funcs import *
 
 EXCHANGE = "NSE"
+obj = SMART_API_OBJ
 
 # Example symbols
-symbols_tuple = tuple(all_symbols)
-
+angel_one_df = pd.read_csv('ANGELFULL.csv')
+symbols_tuple = tuple(angel_one_df['symbol'])
 symbols = list(symbols_tuple)
-# print(symbols, symbols_tuple)
 
-# connectFeed(SMART_WEB, symbols=symbols)
+connectFeed(SMART_WEB, symbols=symbols)
 
 
 
@@ -52,8 +51,29 @@ def clean_numeric(x):
 
 # --- Fetch one day of data ---
 def fetch_one_day(sym, target_date):
-    data = fetch_today_intraday(sym, target_date)
-    df = pd.DataFrame(data, columns=["datetime", "open", "high", "low", "close", "volume"])
+    token = get_equitytoken(sym, exch=EXCHANGE)
+    if not token:
+        return pd.DataFrame()
+
+    fromdate = target_date.strftime("%Y-%m-%d 09:15")
+    todate = target_date.strftime("%Y-%m-%d 15:30")
+
+    params = {
+        "exchange": EXCHANGE,
+        "symboltoken": token,
+        "interval": "ONE_MINUTE",
+        "fromdate": fromdate,
+        "todate": todate
+    }
+
+    try:
+        candles = obj.getCandleData(params)
+        if not candles.get("status") or not candles.get("data"):
+            return pd.DataFrame()
+    except:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(candles["data"], columns=["datetime", "open", "high", "low", "close", "volume"])
 
     # --- Clean numeric columns ---
     df = df.applymap(lambda x: str(x).strip() if x is not None else x)
@@ -63,8 +83,8 @@ def fetch_one_day(sym, target_date):
     df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce")
     df = df.dropna(subset=["datetime", "open", "close"])
     df = df.set_index("datetime").sort_index()
-    # print(f"one day head: {df.head()}")
-    # print(f"one day tail: {df.tail()}")
+    print(f"one day head: {df.head()}")
+    print(f"one day tail: {df.tail()}")
     
     return df
 
@@ -80,12 +100,7 @@ def fetch_historical(sym="ADANIENT", days=2):
         # Skip weekends
         if target_date.weekday() >= 5:
             continue
-        print(f"target data: {target_date}")
-        # target_date = {
-        #     "date": target_date.date,
-        #     "year": target_date.year,
-        #     "month": target_date.month
-        # }
+        
         df_day = fetch_one_day(sym, target_date)
         if not df_day.empty:
             all_df.append(df_day)
@@ -98,4 +113,3 @@ def fetch_historical(sym="ADANIENT", days=2):
         return pd.DataFrame()
     
     return pd.concat(all_df)
-# print(fetch_historical(sym="ADANIENT", days=2))

@@ -5,7 +5,7 @@ import talib
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import json 
-from data import fetch_historical, resample_candles, symbols_tuple
+from data_angel import fetch_historical, resample_candles, symbols_tuple
 import plotly.express as px
 import os
 import traceback  
