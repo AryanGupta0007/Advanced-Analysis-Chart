@@ -5,7 +5,7 @@ import talib
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import json 
-from data_angel import fetch_historical, resample_candles, symbols_tuple
+from data_breeze import fetch_historical, resample_candles, symbols_tuple
 import plotly.express as px
 import os
 import traceback  
@@ -22,6 +22,37 @@ st.session_state.setdefault("file_name", "nofile")
 st.session_state.setdefault("indicator_configs", [])
 st.session_state.setdefault("connectors", [])
 st.session_state.setdefault("cond_specs", [])
+available_cols_cond = ["Price"] + st.session_state.computed_cols
+op_options = [">","<",">=","<=","=="]
+connector_options = ["AND","OR"]
+rhs_kind_options = ["Indicator", "Number"]
+                
+strategy_rules = {
+    'LONG': {
+        'ENTRY': {},
+        'EXIT': {}
+    },
+    'SHORT':{
+        'ENTRY': {},
+        'EXIT': {}
+    } 
+}
+for x in strategy_rules.keys():
+    for y in strategy_rules[x].keys():   
+        x = x.lower()
+        y = y.lower()     
+        st.session_state.setdefault(f'num_rules_input_{x}_{y}', 0)
+        st.session_state.setdefault(f'num_rules_{x}_{y}', 0)
+        for i in range(int(st.session_state[f'num_rules_input_{x}_{y}'])):
+            st.session_state.setdefault(f'rhs_kind_input_{i}_{x}_{y}', rhs_kind_options[0])
+            st.session_state.setdefault(f'rhs_kind_{i}_{x}_{y}', True)
+            st.session_state.setdefault(f'lhs_{i}_{x}_{y}', available_cols_cond[0])
+            st.session_state.setdefault(f'rhs_{i}_{x}_{y}', available_cols_cond[0])
+            st.session_state.setdefault(f"rhs_num_{i}_{x}_{y}", 0)
+            st.session_state.setdefault(f'op_{i}_{x}_{y}', op_options[0])
+            st.session_state.setdefault(f"conn_{i}_{x}_{y}", connector_options[0])        
+                    
+
 # if st.session_state.num_indicators 
     # ---------- Rest of your code continues unchanged ----------
 for i in range(st.session_state.num_indicators):
@@ -67,6 +98,49 @@ if uploaded_file is not None:
         # print(file_data)
             # ---------- Immediately load the config into session_state ----------
         try:
+            new_rules = file_data.get("strategy_rules", {})
+            if new_rules != {}:
+                st.session_state.strategy_rules = new_rules
+                for x in strategy_rules.keys():
+                    for y in strategy_rules[x].keys():
+                        
+                        x = x.upper()
+                        y = y.upper()   
+                        if (st.session_state.strategy_rules[x][y].get("conditions", None) is None or st.session_state.strategy_rules[x][y]["conditions"] == []):
+                            continue
+                        conditions = st.session_state.strategy_rules[x][y]["conditions"]
+                        connectors = st.session_state.strategy_rules[x][y]["connectors"]
+                        x = x.lower()
+                        y = y.lower()     
+                    
+                        st.session_state[f'num_rules_input_{x}_{y}'] =  len(conditions)
+                        st.session_state[f'num_rules_{x}_{y}'] = len(conditions)
+                        
+                        for i, condition in enumerate(conditions):
+                            rhs = condition[2]
+                            lhs = condition[0]
+                            op = condition[1]
+                            rhs_kind = condition[3]
+                            st.session_state[f'rhs_kind_{i}_{x}_{y}'] = rhs_kind
+                            st.session_state[f'lhs_{i}_{x}_{y}']  = lhs
+                            if rhs_kind:
+                                r_kind = 1
+                            else:
+                                r_kind = 0
+                            rhs_kind = rhs_kind_options[r_kind]
+                            if rhs_kind == "Indicator":
+                                st.session_state[f'rhs_{i}_{x}_{y}'] = rhs
+                            else:
+                                st.session_state[f"rhs_num_{i}_{x}_{y}"] = float(rhs) 
+        
+                            st.session_state[f'rhs_kind_input_{i}_{x}_{y}']  = rhs_kind_options[r_kind]
+                                
+                            
+                            st.session_state[f'op_{i}_{x}_{y}'] = op 
+                            if (i > 0):
+                                conn = connectors[i-1]
+                                st.session_state[f"conn_{i}_{x}_{y}"] = conn
+
             st.session_state.chart_interval = file_data["chart"]["interval"]
             st.session_state.chart_period = file_data["chart"]["period"]
             config_data = file_data.get("indicator_conf", [])
@@ -160,7 +234,7 @@ chart_interval = interval_map[interval_label]
 @st.cache_data
 def _fetch_1min(symbol):
     # fetch_historical should return at least 1-min resolution data for resampling
-    return fetch_historical(symbol, days=15)
+    return fetch_historical(symbol, days=1)
 
 data_1m = _fetch_1min(symbol)
 
@@ -353,7 +427,7 @@ for cfg in st.session_state.indicator_configs:
                                        nbdevup=params["nbdevup"], nbdevdn=params["nbdevdn"],
                                        matype=matype_map.get(params["matype"], 0))
             src[f"{col_base}_upper"] = up
-            src[f"{col_base}_middle"] = mid
+            src[f"{col_base}"] = mid
             src[f"{col_base}_lower"] = low
         elif ind == "MACD":
             params = cfg["macd_params"]
@@ -412,11 +486,10 @@ st.markdown("## 🧩 Condition Builder")
 if not "num_conditions_input" in st.session_state: 
     st.session_state.setdefault("num_conditions_input", 0)
     st.session_state.setdefault("num_conditions", 0)
-
+available_cols_cond = ["Price"] + st.session_state.get("computed_cols", []) 
+# available_cols_cond.append( st.session_state.get("computed_cols"))
 with st.expander("Create conditions (LHS op RHS). RHS can be a number or an indicator. Default RHS = Price", expanded=True):
     # build dropdown list that contains only the indicators the user added + Price
-    available_cols_cond = ["Price"] + st.session_state.computed_cols
-
     # number of conditions
     num_conditions_input = st.number_input("Number of Conditions", min_value=0, max_value=6, value=st.session_state.get('num_conditions_input'), key="num_conditions_input", on_change=update_num_conditions)
     
@@ -427,7 +500,7 @@ with st.expander("Create conditions (LHS op RHS). RHS can be a number or an indi
         a, b, c, d, e = st.columns([3,1,3,1,2])
         op_options = [">","<",">=","<=","=="]
         connector_options = ["AND","OR"]
-        rhs_kind_options = ["Indicator/Number", "Number"]
+        rhs_kind_options = ["Indicator", "Number"]
         rhs_kind = f'rhs_kind_{i}'
         if rhs_kind: 
             r_kind = 0
@@ -456,27 +529,6 @@ if st.session_state.cond_specs != new_cond_specs:
 
 if st.session_state.connectors != new_connectors:
     st.session_state.connectors = new_connectors
-cond_specs = st.session_state.cond_specs
-connectors = st.session_state.connectors = new_connectors
-c_json = {
-    "indicator_conf": st.session_state.indicator_configs,
-    "conditions_conf": {
-            "conditions": cond_specs,
-            "connectors": connectors
-                },
-    "chart": {
-        "interval": st.session_state.chart_interval,
-        "period": st.session_state.chart_period
-    } 
-}
-config_json = json.dumps(c_json, indent=4)
-config_file_name = st.sidebar.text_input("Enter the config file name: ", value="config")
-st.sidebar.download_button(
-    label='Export Config',
-    data=config_json,
-    file_name=f"{config_file_name}.json", 
-    mime="application/json"
-)
 
 # ---------- Evaluate Conditions (NaN-safe, bitwise-safe) ----------
 final_mask = None
@@ -517,7 +569,7 @@ if int(st.session_state.num_conditions) > 0 and evaluate_btn:
 
     # combine masks using connectors
     final_mask = masks[0]
-    for idx, conn in enumerate(connectors):
+    for idx, conn in enumerate(st.session_state.connectors):
         if conn == "AND":
             final_mask = final_mask & masks[idx + 1]
         else:
@@ -616,3 +668,130 @@ fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False,
                   height=900, width=1400)
 
 st.plotly_chart(fig, use_container_width=True)
+
+def update_num_rules(x, y):
+    st.session_state[f'num_rules_{x}_{y}'] = st.session_state[f'num_rules_input_{x}_{y}']
+
+def update_rhs_kind_for_rule(i, x, y):
+    if (st.session_state[f"rhs_kind_input_{i}_{x}_{y}"] == "Indicator"):
+        st.session_state[f'rhs_kind_{i}_{x}_{y}'] = True
+        return    
+    st.session_state[f'rhs_kind_{i}_{x}_{y}'] = False    
+
+st.markdown(f'# YOUR BACKTESTER')    
+for x in strategy_rules.keys():
+    st.markdown(f'## Define the rules for {x}')
+    for y in strategy_rules[x].keys():
+        if y == "EXIT":
+            # st.markdown(strategy_rules[x.upper()]["ENTRY"]["conditions"], len(strategy_rules[x.upper()]["ENTRY"]["conditions"]))
+            if len(strategy_rules[x.upper()]["ENTRY"]["conditions"]) == 0:
+                continue
+                 
+        st.markdown(f'### Define the {y} rules ')
+        with st.expander("Create your  conditions (LHS op RHS). RHS can be a number or an indicator. Default RHS = Price", expanded=True):
+        # build dropdown list that contains only the indicators the user added + Price
+            x = x.lower()
+            y = y.lower()
+            available_cols_cond = ["Price"] + st.session_state.computed_cols
+            
+            # number of conditions
+            num_rules_input = st.number_input(
+                    "Number of Conditions", 
+                    min_value=0, 
+                    max_value=6, 
+                    value=st.session_state.get(f'num_rules_input_{x}_{y}'), 
+                    key=f'num_rules_input_{x}_{y}', 
+                    on_change=update_num_rules, # Direct function reference
+                    args=(x, y) # Explicitly pass arguments via args tuple
+                )
+            # cols_for_buttons = st.columns([1, 1, 1, 1, 2])
+            new_cond_specs = []
+            new_connectors = []
+            for i in range(int(st.session_state[f'num_rules_{x}_{y}'])):
+                
+                a, b, c, d, e = st.columns([3,1,3,1,2])
+                rhs_kind = st.session_state.get(f'rhs_kind_{i}_{x}_{y}')
+                if rhs_kind: 
+                    r_kind = 0
+                else: 
+                    r_kind = 1
+                print(f'lhs, rhs: {st.session_state[f"lhs_{i}"]}"], {st.session_state[f"rhs_{i}"]}"]')
+                lhs = a.selectbox(f"LHS {i+1}", options=available_cols_cond, index=available_cols_cond.index(st.session_state.get(f'lhs_{i}_{x}_{y}',available_cols_cond[0])), key=f"lhs_{i}_{x}_{y}")
+                op = b.selectbox(f"Op {i+1}", options=op_options ,index=op_options.index(st.session_state.get(f'op_{i}_{x}_{y}', op_options[0])),  key=f"op_{i}_{x}_{y}")
+                print(f'690: {rhs_kind_options[r_kind]}')
+                rhs_kind = c.selectbox(
+                    f"RHS kind {i+1}", 
+                    options=rhs_kind_options, 
+                    index=r_kind, 
+                    key=f"rhs_kind_input_{i}_{x}_{y}", 
+                    on_change=update_rhs_kind_for_rule, 
+                    args=(i, x, y) # Pass i, x, and y as arguments
+                        )
+                if rhs_kind == "Number":
+                    rhs_val = c.number_input(f"Value {i+1}", value=st.session_state.get(f"rhs_num_{i}_{x}_{y}"), key=f"rhs_num_{i}_{x}_{y}")
+                    rhs = float(rhs_val)
+                    rhs_is_num = True
+                else:
+                    rhs = c.selectbox(f"RHS {i+1}", options=available_cols_cond, index=available_cols_cond.index(st.session_state.get(f'rhs_{i}_{x}_{y}', available_cols_cond[0])), key=f"rhs_{i}_{x}_{y}")
+                    rhs_is_num = False
+
+                new_cond_specs.append((lhs, op, rhs, rhs_is_num))
+                if i < int(st.session_state[f'num_rules_{x}_{y}'])-1:
+                    connector = e.selectbox(f"Connector {i+1}", options=connector_options, index=connector_options.index(st.session_state.get(f"conn_{i}_{x}_{y}", connector_options[0])), key=f"conn_{i}_{x}_{y}")
+                    new_connectors.append(connector)
+            strategy_rules[x.upper()][y.upper()] = {
+                'conditions': new_cond_specs,
+                'connectors': new_connectors
+            }
+            
+backtest_btn = st.button("Backtest Strategy")
+        
+# if backtest_btn:
+        
+cond_specs = st.session_state.cond_specs
+connectors = st.session_state.connectors = new_connectors
+
+c_json = {
+    "indicator_conf": st.session_state.indicator_configs,
+    "computed_cols": st.session_state.computed_cols,
+    "conditions_conf": {
+            "conditions": cond_specs,
+            "connectors": connectors
+                },
+    "strategy_rules": strategy_rules,
+    "chart": {
+        "interval": st.session_state.chart_interval,
+        "period": st.session_state.chart_period
+    } 
+}
+config_json = json.dumps(c_json, indent=4)
+config_file_name = st.sidebar.text_input("Enter the config file name: ", value="config")
+st.sidebar.download_button(
+    label='Export Config',
+    data=config_json,
+    file_name=f"{config_file_name}.json", 
+    mime="application/json"
+)
+
+
+import matplotlib.pyplot as plt
+from my_backtester import backtest, DynamicStrategy, get_detailed_metrics, plot_candles_with_entries_and_exits, plot_strategy_metrics
+if backtest_btn:
+    st.markdown(strategy_rules)                    
+    st.markdown(data.columns)
+    strat = backtest(data, DynamicStrategy, 10000, data.columns, strategy_rules)
+    metrics, portfolio_values = get_detailed_metrics(strat)
+    st.markdown(metrics)
+    entries = strat.entries 
+    exits = strat.exits
+    plot_candles_with_entries_and_exits(data, entries, exits)
+    plot_strategy_metrics(metrics)
+    portfolio_values = portfolio_values.set_index("datetime")
+    portfolio_values.index = pd.to_datetime(portfolio_values.index)
+    # portfolio_values.drop(0)
+    plt.figure(figsize=(15, 12))
+    plt.plot(portfolio_values.index, portfolio_values["value"], label='Portfolio vs Time')
+    plt.xlabel('Datetime')
+    plt.ylabel('Value')
+    plt.title('Portfolio Value over Time')
+    plt.show()
