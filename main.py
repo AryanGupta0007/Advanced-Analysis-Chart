@@ -9,12 +9,16 @@ from data_breeze import fetch_historical, resample_candles, symbols_tuple
 import plotly.express as px
 import os
 import traceback  
-default_colors = px.colors.qualitative.Plotly
 
+default_colors = px.colors.qualitative.Plotly
+ohlc_cols = ['open', 'high', 'low', 'close']
+line_indicators = ["SMA","EMA","WMA","RSI","ATR","STOCH","CCI","MOM","TRIX","ROC","DEMA","TEMA","KAMA","MFI","ADX", "VWAP"]
+moving_averages = ["SMA","EMA","WMA","DEMA","TEMA","KAMA"]        
 # ---------- App Layout ----------
 st.set_page_config(layout="wide", page_title="Advanced Multi-Indicator Chart")
 st.title("Advanced Multi-Indicator Chart")
-st.session_state.setdefault("computed_cols", [])
+
+st.session_state.setdefault("computed_cols", ohlc_cols)
 st.session_state.setdefault("num_indicators", 1)
 st.session_state.setdefault("num_conditions", 0)
 st.session_state.setdefault("config_loaded", False)
@@ -22,7 +26,9 @@ st.session_state.setdefault("file_name", "nofile")
 st.session_state.setdefault("indicator_configs", [])
 st.session_state.setdefault("connectors", [])
 st.session_state.setdefault("cond_specs", [])
-available_cols_cond = ["Price"] + st.session_state.computed_cols
+
+available_cols_cond = ["close"] if len(st.session_state.computed_cols) != 0 else st.session_state.computed_cols 
+print("29", available_cols_cond, st.session_state.computed_cols)
 op_options = [">","<",">=","<=","=="]
 connector_options = ["AND","OR"]
 rhs_kind_options = ["Indicator", "Number"]
@@ -46,8 +52,8 @@ for x in strategy_rules.keys():
         for i in range(int(st.session_state[f'num_rules_input_{x}_{y}'])):
             st.session_state.setdefault(f'rhs_kind_input_{i}_{x}_{y}', rhs_kind_options[0])
             st.session_state.setdefault(f'rhs_kind_{i}_{x}_{y}', True)
-            st.session_state.setdefault(f'lhs_{i}_{x}_{y}', available_cols_cond[0])
-            st.session_state.setdefault(f'rhs_{i}_{x}_{y}', available_cols_cond[0])
+            st.session_state.setdefault(f'lhs_{i}_{x}_{y}', "close")
+            st.session_state.setdefault(f'rhs_{i}_{x}_{y}', "close")
             st.session_state.setdefault(f"rhs_num_{i}_{x}_{y}", 0)
             st.session_state.setdefault(f'op_{i}_{x}_{y}', op_options[0])
             st.session_state.setdefault(f"conn_{i}_{x}_{y}", connector_options[0])        
@@ -57,6 +63,7 @@ for x in strategy_rules.keys():
     # ---------- Rest of your code continues unchanged ----------
 for i in range(st.session_state.num_indicators):
     st.session_state.setdefault(f"type_{i}", "SMA")
+    st.session_state.setdefault(f"ref_{i}", "close")
     st.session_state.setdefault(f"period_{i}", 20)
     st.session_state.setdefault(f"tf_{i}", "Same as Chart")
     st.session_state.setdefault(f"bb_period_{i}", 20)
@@ -76,10 +83,10 @@ for i in range(st.session_state.num_indicators):
     st.session_state.setdefault(f"color_macd_line{i}", "#636EFA")
     
 for i in range(6): 
-    st.session_state.setdefault(f'lhs_{i}',  "Price") 
+    st.session_state.setdefault(f'lhs_{i}',  "close") 
     st.session_state.setdefault(f'op_{i}',  ">") 
     st.session_state.setdefault(f"rhs_num_{i}",  3)  
-    st.session_state.setdefault(f'rhs_{i}',  "Price")         
+    st.session_state.setdefault(f'rhs_{i}',  "close")         
     st.session_state.setdefault(f"conn_{i}",  "AND")
 st.session_state.setdefault("cond_specs", [])
 uploaded_file = st.sidebar.file_uploader("Import Conditions", type="json")
@@ -99,6 +106,7 @@ if uploaded_file is not None:
             # ---------- Immediately load the config into session_state ----------
         try:
             new_rules = file_data.get("strategy_rules", {})
+            st.session_state.computed_cols = file_data.get("computed_cols")
             if new_rules != {}:
                 st.session_state.strategy_rules = new_rules
                 for x in strategy_rules.keys():
@@ -155,13 +163,13 @@ if uploaded_file is not None:
                 st.session_state[f"type_{i}"] = cfg["type"] 
                 st.session_state[f"period_{i}"] = cfg.get("period", 20)
                 st.session_state[f"tf_{i}"] = cfg.get("timeframe")
-
+                st.session_state[f"ref_{i}"] = cfg.get("ref_val")
                 st.session_state[f"color_{i}"] = cfg.get("color", "#636EFA")
 
                 # BBANDS
                 bb = cfg.get("bb_params", {})
                 if cfg["bb_params"] is not None:
-                    st.session_state[f"bb_period_{i}"] = bb.get("nbdevup", 20)
+                    st.session_state[f"bb_period_{i}"] = st.session_state.get(f"period_{i}")
                     st.session_state[f"bb_up_{i}"] = bb.get("nbdevup", 2.0)
                     st.session_state[f"bb_dn_{i}"] = bb.get("nbdevdn", 2.0)
                     st.session_state[f"bb_ma_{i}"] = bb.get("matype", "SMA")
@@ -234,7 +242,7 @@ chart_interval = interval_map[interval_label]
 @st.cache_data
 def _fetch_1min(symbol):
     # fetch_historical should return at least 1-min resolution data for resampling
-    return fetch_historical(symbol, days=1)
+    return fetch_historical(symbol, days=15)
 
 data_1m = _fetch_1min(symbol)
 
@@ -258,7 +266,7 @@ if data.empty:
     st.stop()
 
 # a friendly Price column
-data["Price"] = data["close"]
+# data["Price"] = data["close"]
     # ---------- Indicator Configuration UI ----------
 st.sidebar.header("Indicators Configuration")
 available_indicators = [
@@ -307,16 +315,19 @@ for i in range(int(st.session_state.num_indicators)):
         period = None
         bb_params = None
         macd_params = None
-        line_indicators = ["SMA","EMA","WMA","RSI","ATR","STOCH","CCI","MOM","TRIX","ROC","DEMA","TEMA","KAMA","MFI","ADX", "VWAP"]
         if ind in line_indicators:
             color = st.color_picker("Line Color", value=st.session_state.get(f"color_{i}"), key=f"color_{i}")
             period = st.number_input("Period", min_value=1, max_value=500, value=st.session_state.get(f"period_{i}", 20), key=f"period_{i}")
+        
+        if ind in moving_averages:
+            ref = st.selectbox("Ref Type", ohlc_cols, index=ohlc_cols.index(st.session_state.get(f"ref_{i}", "close")), key=f"ref_{i}")
+            
         if ind == "BBANDS":
-            period = float(st.number_input("BBANDS Period", min_value=2.0, max_value=200.0, value=st.session_state.get(f"bb_period_{i}", 20), key=f"bb_period_{i}"))
-            nbdevup = float(st.number_input("Upper Band Std Dev", min_value=0.1, max_value=5.0, value=st.session_state.get(f"bb_up_{i}", 2.0), step=0.1, key=f"bb_up_{i}"))
+            period = float(st.number_input("BBANDS Period", min_value=2.0, max_value=200.0, value=float(st.session_state.get(f"bb_period_{i}", 20.0)), key=f"bb_period_{i}"))
+            nbdevup = float(st.number_input("Upper Band Std Dev", min_value=0.1, max_value=5.0, value=float(st.session_state.get(f"bb_up_{i}", 2.0)), step=0.1, key=f"bb_up_{i}"))
             color_up = st.color_picker("Upper Band Color", value=st.session_state.get(f"color_bbands_nbdevup_{i}"), key=f"color_bbands_nbdevup_{i}")
             
-            nbdevdn = float(st.number_input("Lower Band Std Dev", min_value=0.1, max_value=5.0, value=st.session_state.get(f"bb_dn_{i}", 2.0), step=0.1, key=f"bb_dn_{i}"))
+            nbdevdn = float(st.number_input("Lower Band Std Dev", min_value=0.1, max_value=5.0, value=float(st.session_state.get(f"bb_dn_{i}", 2.0)), step=0.1, key=f"bb_dn_{i}"))
             color_down = st.color_picker("Lower Band Color", value=st.session_state.get(f"color_bbands_nbdevdn_{i}"), key=f"color_bbands_nbdevdn_{i}")
             
             ma_type = st.selectbox("MA Type", ["SMA","EMA","WMA","DEMA","TEMA"], key=f"bb_ma_{i}")
@@ -370,8 +381,11 @@ for i in range(int(st.session_state.num_indicators)):
             "period": period,
             "timeframe": tf,
             "bb_params": bb_params,
-            "macd_params": macd_params
+            "macd_params": macd_params,
+            "ref_val": "close"
         }
+        if ref:
+            params_dict["ref_val"] = ref
         if ind in line_indicators:
             params_dict["color"] = color
         print(f"params_dict: {params_dict}")
@@ -388,39 +402,42 @@ computed_cols = st.session_state.computed_cols  # exact column names we compute;
 oscillator_set = {"RSI","ATR","MACD","ADX","STOCH","CCI","MFI","TRIX","ROC","OBV"}
 
 for cfg in st.session_state.indicator_configs:
-    print(cfg)
+    print("405. config: ", cfg)
     ind = cfg["type"]
     period = cfg.get("period")
     tf = cfg.get("timeframe")
+    
     # unique col base including timeframe so multiple instances are distinct
     col_base = f"{ind}_{period}_{tf}" if period is not None else f"{ind}_{tf}"
     print(f"323: {computed_cols}")
-    if col_base not in computed_cols:
-        st.session_state.computed_cols.append(col_base)
     print(f"308: {chart_interval}, {tf}")
     # choose the source (resample raw 1-min to indicator timeframe if needed)
     src = data if tf == chart_interval else resample_candles(df, tf)
-
+    if ind in moving_averages:
+        ref_val = st.session_state.get(f"ref_{i}", "close")
+        col_base = f"{ind}_{ref_val}_{period}_{tf}"
+    
     try:
         if ind == "SMA":
-            src[col_base] = talib.SMA(src["close"], timeperiod=int(period))
+            src[col_base] = talib.SMA(src[ref_val], timeperiod=int(period))
         elif ind == "EMA":
-            src[col_base] = talib.EMA(src["close"], timeperiod=int(period))
+            src[col_base] = talib.EMA(src[ref_val], timeperiod=int(period))
         elif ind == "WMA":
-            src[col_base] = talib.WMA(src["close"], timeperiod=int(period))
+            src[col_base] = talib.WMA(src[ref_val], timeperiod=int(period))
         elif ind == "DEMA":
-            src[col_base] = talib.DEMA(src["close"], timeperiod=int(period))
+            src[col_base] = talib.DEMA(src[ref_val], timeperiod=int(period))
         elif ind == "TEMA":
-            src[col_base] = talib.TEMA(src["close"], timeperiod=int(period))
+            src[col_base] = talib.TEMA(src[ref_val], timeperiod=int(period))
         elif ind == "KAMA":
-            src[col_base] = talib.KAMA(src["close"], timeperiod=int(period))
+            src[col_base] = talib.KAMA(src[ref_val], timeperiod=int(period))
         elif ind == "RSI":
-            src[col_base] = talib.RSI(src["close"], timeperiod=int(period))
+            src[col_base] = talib.RSI(src[ref_val], timeperiod=int(period))
         elif ind == "ATR":
             src[col_base] = talib.ATR(src["high"], src["low"], src["close"], timeperiod=int(period))
         elif ind == "VWAP":
             src[col_base] = (src["close"] * src["volume"]).rolling(int(period)).sum() / src["volume"].rolling(int(period)).sum()
         elif ind == "BBANDS":
+            
             params = cfg["bb_params"]
             matype_map = {"SMA": 0, "EMA": 1, "WMA": 2, "DEMA": 3, "TEMA": 4}
             up, mid, low = talib.BBANDS(src["close"], timeperiod=int(period),
@@ -453,11 +470,11 @@ for cfg in st.session_state.indicator_configs:
         elif ind == "MFI":
             src[col_base] = talib.MFI(src["high"], src["low"], src["close"], src["volume"], timeperiod=int(period))
         elif ind == "MOM":
-            src[col_base] = talib.MOM(src["close"], timeperiod=int(period))
+            src[col_base] = talib.MOM(src[ref_val], timeperiod=int(period))
         elif ind == "ROC":
-            src[col_base] = talib.ROC(src["close"], timeperiod=int(period))
+            src[col_base] = talib.ROC(src[ref_val], timeperiod=int(period))
         elif ind == "TRIX":
-            src[col_base] = talib.TRIX(src["close"], timeperiod=int(period))
+            src[col_base] = talib.TRIX(src[ref_val], timeperiod=int(period))
         elif ind == "AROON":
             aroon_dn, aroon_up = talib.AROON(src["high"], src["low"], timeperiod=int(period))
             src[f"{col_base}_down"] = aroon_dn
@@ -480,13 +497,17 @@ for cfg in st.session_state.indicator_configs:
             data[c] = src[c].reindex(data.index, method="ffill")
         except Exception:
             data[c] = src[c]
+    all_cols = list(data.columns)
+    for col in all_cols:
+        if col not in st.session_state.computed_cols:
+            st.session_state.computed_cols.append(col)
 print(f"408 {st.session_state.computed_cols}")
 st.markdown("## 🧩 Condition Builder")
 
 if not "num_conditions_input" in st.session_state: 
     st.session_state.setdefault("num_conditions_input", 0)
     st.session_state.setdefault("num_conditions", 0)
-available_cols_cond = ["Price"] + st.session_state.get("computed_cols", []) 
+available_cols_cond = st.session_state.get("computed_cols", []) 
 # available_cols_cond.append( st.session_state.get("computed_cols"))
 with st.expander("Create conditions (LHS op RHS). RHS can be a number or an indicator. Default RHS = Price", expanded=True):
     # build dropdown list that contains only the indicators the user added + Price
@@ -535,8 +556,8 @@ final_mask = None
 if int(st.session_state.num_conditions) > 0 and evaluate_btn:
     # build safe arrays for all available columns (price + computed)
     vars_safe = {}
-    print(f'available_cols_cond: {available_cols_cond}')
-    for col in available_cols_cond:
+    # print(f'available_cols_cond: {available_cols_cond}')
+    for col in st.session_state.computed_cols:
         if col in data.columns:
             arr = data[col].values.astype(float)
             arr = np.nan_to_num(arr, nan=0.0)  # replace NaN with 0 for safe comparisons
@@ -561,8 +582,8 @@ if int(st.session_state.num_conditions) > 0 and evaluate_btn:
             mask = lhs_arr <= rhs_arr
         elif op == "==":
             mask = lhs_arr == rhs_arr
-        else:
-            mask = lhs_arr > rhs_arr
+        # else:
+        #     mask = lhs_arr > rhs_arr
 
         mask = np.nan_to_num(mask, nan=0).astype(bool)
         masks.append(mask)
@@ -598,12 +619,14 @@ fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.04,
 fig.add_trace(go.Candlestick(x=data.index, open=data["open"], high=data["high"], low=data["low"], close=data["close"], name="Price"), row=1, col=1)
 
 # Overlay non-oscillator indicators on price
-for cfg in indicator_configs:
+for cfg in st.session_state.indicator_configs:
     ind = cfg["type"]
     period = cfg.get("period")
     tf = cfg.get("timeframe")
+    ref_val = cfg.get("ref_val", "close")
     col_base = f"{ind}_{period}_{tf}" if period is not None else f"{ind}_{tf}"
-
+    if ind in moving_averages:
+        col_base = f"{ind}_{ref_val}_{period}_{tf}"
     if ind in oscillator_set:
         continue  # oscillator placed separately
     color = cfg.get("color")
@@ -692,7 +715,7 @@ for x in strategy_rules.keys():
         # build dropdown list that contains only the indicators the user added + Price
             x = x.lower()
             y = y.lower()
-            available_cols_cond = ["Price"] + st.session_state.computed_cols
+            available_cols_cond = st.session_state.computed_cols
             
             # number of conditions
             num_rules_input = st.number_input(
@@ -777,15 +800,26 @@ st.sidebar.download_button(
 import matplotlib.pyplot as plt
 from my_backtester import backtest, DynamicStrategy, get_detailed_metrics, plot_candles_with_entries_and_exits, plot_strategy_metrics
 if backtest_btn:
-    st.markdown(strategy_rules)                    
-    st.markdown(data.columns)
+    # st.markdown(strategy_rules)                    
+    # st.markdown(data.columns)
     strat = backtest(data, DynamicStrategy, 10000, data.columns, strategy_rules)
     metrics, portfolio_values = get_detailed_metrics(strat)
-    st.markdown(metrics)
+    metrics_df = pd.DataFrame({'metric':metrics.keys(), 'value': metrics.values()})
+    # st.markdown(metrics_df)
+    st.table(metrics_df)
+    figs = plot_strategy_metrics(metrics)
+    for fig in figs:
+        st.pyplot(fig)
+
+    
+    
     entries = strat.entries 
     exits = strat.exits
-    plot_candles_with_entries_and_exits(data, entries, exits)
-    plot_strategy_metrics(metrics)
+    
+        
+    fig = plot_candles_with_entries_and_exits(data, entries, exits)
+    st.plotly_chart(fig, use_container_width=True)
+    
     portfolio_values = portfolio_values.set_index("datetime")
     portfolio_values.index = pd.to_datetime(portfolio_values.index)
     # portfolio_values.drop(0)

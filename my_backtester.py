@@ -262,65 +262,66 @@ def safe_get(d, *keys, default=0):
             return default
     return d
 
+import matplotlib.pyplot as plt
 
 def plot_strategy_metrics(metrics):
-    # ---- 1. Key performance metrics bar chart ----
+    figs = []
+
+    # ---- 1. Key performance metrics ----
     key_perf = {
-    # 'Sharpe Ratio': metrics.get('sharpe_ratio', 0) or 0,
-    'Calmar Ratio': metrics.get('calmar_ratio', 0) or 0,
-    'Cumulative Return %': metrics.get('cumulative_return_%', 0) or 0,
-    'Volatility %': metrics.get('volatility_%', 0) or 0,
-    'Average Return %': metrics.get('average_return_%', 0) or 0
-}
+        'Calmar Ratio': metrics.get('calmar_ratio', 0) or 0,
+        'Cumulative Return %': metrics.get('cumulative_return_%', 0) or 0,
+        'Volatility %': metrics.get('volatility_%', 0) or 0,
+        'Average Return %': metrics.get('average_return_%', 0) or 0
+    }
 
-
-    plt.figure(figsize=(12,5))
-    plt.bar(key_perf.keys(), key_perf.values(), color='skyblue', alpha=0.8)
-    plt.title('Key Performance Metrics')
-    plt.ylabel('Value')
-    plt.xticks(rotation=45, ha='right')
-    plt.grid(axis='y', linestyle='--', alpha=0.5)
-    plt.tight_layout()
-    plt.show()
+    fig1, ax1 = plt.subplots(figsize=(12,5))
+    ax1.bar(key_perf.keys(), key_perf.values(), color='skyblue', alpha=0.8)
+    ax1.set_title('Key Performance Metrics')
+    ax1.set_ylabel('Value')
+    ax1.set_xticklabels(key_perf.keys(), rotation=45, ha='right')
+    ax1.grid(axis='y', linestyle='--', alpha=0.5)
+    figs.append(fig1)
 
     # ---- 2. Winning vs Losing Trades ----
-    trades_counts = [metrics['win_rate_%'], metrics['loss_rate_%']]
+    trades_counts = [metrics.get('win_rate_%', 0), metrics.get('loss_rate_%', 0)]
     trades_labels = ['Winning Trades','Losing Trades']
-    # print(metrics['winning_trades'], metrics['losing_trades'])
-    plt.figure(figsize=(6,6))
-    plt.pie(trades_counts, labels=trades_labels, autopct='%1.1f%%', colors=['green','red'], startangle=90)
-    plt.title('Winning vs Losing Trades')
-    plt.show()
+
+    fig2, ax2 = plt.subplots(figsize=(6,6))
+    ax2.pie(trades_counts, labels=trades_labels, autopct='%1.1f%%', colors=['green','red'], startangle=90)
+    ax2.set_title('Winning vs Losing Trades')
+    figs.append(fig2)
 
     # ---- 3. Trade profitability metrics ----
     trade_stats = {
-        'Avg Win': metrics['avg_win'],
-        'Avg Loss': metrics['avg_loss'],
-        'Max Win': metrics['max_win'],
-        'Max Loss': metrics['max_loss'],
-        'Profit Factor': metrics['profit_factor'],
-        'Expectancy/Trade': metrics['expectancy_per_trade']
+        'Avg Win': metrics.get('avg_win', 0),
+        'Avg Loss': metrics.get('avg_loss', 0),
+        'Max Win': metrics.get('max_win', 0),
+        'Max Loss': metrics.get('max_loss', 0),
+        'Profit Factor': metrics.get('profit_factor', 0),
+        'Expectancy/Trade': metrics.get('expectancy_per_trade', 0)
     }
 
-    plt.figure(figsize=(12,5))
-    plt.bar(trade_stats.keys(), trade_stats.values(), color='orange', alpha=0.8)
-    plt.title('Trade Profitability Metrics')
-    plt.ylabel('PnL / Ratio')
-    plt.xticks(rotation=45, ha='right')
-    plt.grid(axis='y', linestyle='--', alpha=0.5)
-    plt.tight_layout()
-    plt.show()
+    fig3, ax3 = plt.subplots(figsize=(12,5))
+    ax3.bar(trade_stats.keys(), trade_stats.values(), color='orange', alpha=0.8)
+    ax3.set_title('Trade Profitability Metrics')
+    ax3.set_ylabel('PnL / Ratio')
+    ax3.set_xticklabels(trade_stats.keys(), rotation=45, ha='right')
+    ax3.grid(axis='y', linestyle='--', alpha=0.5)
+    figs.append(fig3)
 
     # ---- 4. Return vs Drawdown ----
-    plt.figure(figsize=(8,5))
-    plt.bar(['Cumulative Return %','Max Drawdown %'],
-            [metrics['cumulative_return_%'], metrics['max_drawdown_%']],
+    fig4, ax4 = plt.subplots(figsize=(8,5))
+    ax4.bar(['Cumulative Return %','Max Drawdown %'],
+            [metrics.get('cumulative_return_%', 0), metrics.get('max_drawdown_%', 0)],
             color=['blue','red'], alpha=0.7)
-    plt.title('Return vs Drawdown')
-    plt.ylabel('%')
-    plt.grid(axis='y', linestyle='--', alpha=0.5)
-    plt.show()
-    
+    ax4.set_title('Return vs Drawdown')
+    ax4.set_ylabel('%')
+    ax4.grid(axis='y', linestyle='--', alpha=0.5)
+    figs.append(fig4)
+
+    return figs
+
 def plot_candles_with_entries_and_exits(df, entries=None, exits=None):
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -335,7 +336,7 @@ def plot_candles_with_entries_and_exits(df, entries=None, exits=None):
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
         row_heights=[0.6, 0.4],
-        subplot_titles=('Candlestick with Entries/Exits', 'ADX / DMP / DMN')
+        subplot_titles=('Price with Entries/Exits')
     )
 
     # Candlestick
@@ -391,33 +392,14 @@ def plot_candles_with_entries_and_exits(df, entries=None, exits=None):
         ), row=1, col=1)
 
     # --- Buttons to toggle labels ---
+    
     fig.update_layout(
-        updatemenus=[
-            dict(
-                type="buttons",
-                direction="right",
-                x=1,
-                y=1.1,
-                buttons=[
-                    dict(label="Show Entry Labels",
-                         method="update",
-                         args=[{"visible":[trace.visible or (trace.name=='Entry Label') for trace in fig.data]}]),
-                    dict(label="Show Exit Labels",
-                         method="update",
-                         args=[{"visible":[trace.visible or (trace.name=='Exit Label') for trace in fig.data]}]),
-                    dict(label="Hide Labels",
-                         method="update",
-                         args=[{"visible":[trace.name not in ['Entry Label','Exit Label'] for trace in fig.data]}])
-                ]
-            )
-        ]
-    )
-
-    fig.update_layout(
-        title='Candlestick with Entries/Exits and ADX/DMP/DMN',
+        title='Candlestick with Entries/Exits',
         xaxis_title='Time', yaxis_title='Price',
         xaxis_rangeslider_visible=False, height=750,
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
     )
 
-    fig.show()
+    
+    # --- Display in Streamlit ---
+    return fig
