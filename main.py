@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import json 
 from utils import *
 from data_breeze import fetch_historical, symbols_tuple
 import traceback  
@@ -9,150 +8,20 @@ import traceback
 # ---------- App Layout ----------
 st.set_page_config(layout="wide", page_title="Advanced Multi-Indicator Chart")
 st.title("Advanced Multi-Indicator Chart")
-
-st.session_state = set_defaults()
+set_defaults()
 
 available_cols_cond = ["close"] if len(st.session_state.computed_cols) != 0 else st.session_state.computed_cols 
 uploaded_file = st.sidebar.file_uploader("Import Conditions", type="json")
 indicator_configs =  st.session_state.get("indicator_configs")
 
 if uploaded_file is not None:
+    load_file(uploaded_file=uploaded_file)    
     
-    file_data = json.load(uploaded_file)
-    if (uploaded_file.name != st.session_state.file_name):
-        st.session_state["config_loaded"] = False  
-        st.session_state["file_name"] = uploaded_file.name
-        st.session_state["indicator_configs"] = []
-        st.session_state["computed_cols"] = []            
-    if st.session_state["config_loaded"] is False:
-        # Only process if new file or different file
-        # print(file_data)
-            # ---------- Immediately load the config into session_state ----------
-        try:
-            st.session_state.brokerage = file_data["broker"]["brokerage"]
-            st.session_state.slippage = file_data["broker"]["slippage"]
-            st.session_state.cash = file_data["broker"]["cash"]
-            new_rules = file_data.get("strategy_rules", {})
-            st.session_state.computed_cols = file_data.get("computed_cols")
-            if new_rules != {}:
-                st.session_state.strategy_rules = new_rules
-                for x in strategy_rules.keys():
-                    for y in strategy_rules[x].keys():
-                        
-                        x = x.upper()
-                        y = y.upper()   
-                        if (st.session_state.strategy_rules[x][y].get("conditions", None) is None or st.session_state.strategy_rules[x][y]["conditions"] == []):
-                            continue
-                        conditions = st.session_state.strategy_rules[x][y]["conditions"]
-                        connectors = st.session_state.strategy_rules[x][y]["connectors"]
-                        x = x.lower()
-                        y = y.lower()     
-                    
-                        st.session_state[f'num_rules_input_{x}_{y}'] =  len(conditions)
-                        st.session_state[f'num_rules_{x}_{y}'] = len(conditions)
-                        
-                        for i, condition in enumerate(conditions):
-                            rhs = condition[2]
-                            lhs = condition[0]
-                            op = condition[1]
-                            rhs_kind = condition[3]
-                            st.session_state[f'rhs_kind_{i}_{x}_{y}'] = rhs_kind
-                            st.session_state[f'lhs_{i}_{x}_{y}']  = lhs
-                            if rhs_kind:
-                                r_kind = 1
-                            else:
-                                r_kind = 0
-                            rhs_kind = rhs_kind_options[r_kind]
-                            if rhs_kind == "Indicator":
-                                st.session_state[f'rhs_{i}_{x}_{y}'] = rhs
-                            else:
-                                st.session_state[f"rhs_num_{i}_{x}_{y}"] = float(rhs) 
-        
-                            st.session_state[f'rhs_kind_input_{i}_{x}_{y}']  = rhs_kind_options[r_kind]
-                                
-                            
-                            st.session_state[f'op_{i}_{x}_{y}'] = op 
-                            if (i > 0):
-                                conn = connectors[i-1]
-                                st.session_state[f"conn_{i}_{x}_{y}"] = conn
-
-            st.session_state.chart_interval = file_data["chart"]["interval"]
-            st.session_state.chart_period = file_data["chart"]["period"]
-            config_data = file_data.get("indicator_conf", [])
-            conditions_data = file_data.get("conditions_conf", {})
-            # ----------------- Load Indicators -----------------
-            st.session_state.num_indicators = len(config_data)
-            st.session_state.num_indicators_input = len(config_data)
-            # print(config_data, conditions_data)
-            # print(f'session_state: {st.session_state}')
-            for i, cfg in enumerate(config_data):
-                # print(f"{i} {cfg}")
-                st.session_state[f"type_{i}"] = cfg["type"] 
-                st.session_state[f"period_{i}"] = cfg.get("period", 20)
-                st.session_state[f"tf_{i}"] = cfg.get("timeframe")
-                st.session_state[f"ref_{i}"] = cfg.get("ref_val")
-                st.session_state[f"color_{i}"] = cfg.get("color", "#636EFA")
-
-                # BBANDS
-                bb = cfg.get("bb_params", {})
-                if cfg["bb_params"] is not None:
-                    st.session_state[f"bb_period_{i}"] = st.session_state.get(f"period_{i}")
-                    st.session_state[f"bb_up_{i}"] = bb.get("nbdevup", 2.0)
-                    st.session_state[f"bb_dn_{i}"] = bb.get("nbdevdn", 2.0)
-                    st.session_state[f"bb_ma_{i}"] = bb.get("matype", "SMA")
-                    st.session_state[f"color_bbands_nbdevup_{i}"] = bb.get("color_up", "#636EFA")
-                    st.session_state[f"color_bbands_nbdevdn_{i}"] = bb.get("color_down", "#636EFA")
-                    st.session_state[f"color_bbands_ma_{i}"] = bb.get("color_ma", "#636EFA")
-
-                # MACD
-                macd = cfg.get("macd_params", {})
-                if cfg["macd_params"] is not None:
-                    st.session_state[f"macd_fast_{i}"] = macd.get("fastperiod", 12)
-                    st.session_state[f"macd_slow_{i}"] = macd.get("slowperiod", 26)
-                    st.session_state[f"macd_signal_{i}"] = macd.get("signalperiod", 9)
-                    st.session_state[f"color_macd_fast{i}"] = macd.get("color_fast", "#636EFA")
-                    st.session_state[f"color_macd_slow{i}"] = macd.get("color_slow", "#636EFA")
-                    st.session_state[f"color_macd_signal{i}"] = macd.get("color_signal", "#636EFA")
-                    st.session_state[f"color_macd_line{i}"] = macd.get("color_line", "#636EFA")
-                    st.session_state[f"color_macd_hist{i}"] = macd.get("color_hist", "#636EFA")
-                st.session_state.indicator_configs.append(cfg)
-            # ----------------- Load Conditions -----------------
-            conditions = conditions_data.get("conditions", [])
-            connectors = conditions_data.get("connectors", [])
-            st.session_state.cond_specs = conditions
-            st.session_state.connectors = connectors
-            
-            st.session_state.num_conditions = len(conditions)
-            st.session_state.num_conditions_input = len(conditions)
-            for i, x in enumerate(conditions):
-                print(f'condition: {x}')
-                st.session_state[f'lhs_{i}'] = x[0]
-                st.session_state[f'op_{i}'] = x[1]
-                st.session_state[f"rhs_kind_{i}"] = x[3]
-                if st.session_state[f"rhs_kind_{i}"]: 
-                    st.session_state[f"rhs_num_{i}"] = x[2] 
-                else:
-                    st.session_state[f'rhs_{i}'] = x[2]
-                    
-            for i, x in enumerate(connectors):
-                st.session_state[f"conn_{i}"] = x
-                            
-            st.session_state["config_loaded"] = True
-            # print(f'session state after upload: {st.session_state}')
-            st.success(f"✅ Loaded {len(config_data)} indicators and {len(conditions)} conditions from uploaded config!")
-            st.rerun()
-
-        except Exception as e:
-            st.error(f"Failed to load config: {e}")
-            st.error(traceback.format_exc())
-
 
 # ---------- Sidebar: Chart Settings ----------
 st.sidebar.header("Chart Settings")
 
 symbol = st.sidebar.selectbox("Select Symbol", symbols_tuple, index=symbols_tuple.index("ADANIENT"))
-st.session_state.setdefault("chart_period", "1d")
-st.session_state.setdefault("chart_interval", "1 Minute")
 period_options = ["1d", "2d", "5d", "15d"]
 period_str = st.sidebar.selectbox("Select Period", period_options, index=period_options.index(st.session_state.get("chart_period", "1d")), key="chart_period")
 days = int(period_str.rstrip("d"))
