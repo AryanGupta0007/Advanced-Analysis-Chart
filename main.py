@@ -105,6 +105,9 @@ if uploaded_file is not None:
         # print(file_data)
             # ---------- Immediately load the config into session_state ----------
         try:
+            st.session_state.brokerage = file_data["broker"]["brokerage"]
+            st.session_state.slippage = file_data["broker"]["slippage"]
+            st.session_state.cash = file_data["broker"]["cash"]
             new_rules = file_data.get("strategy_rules", {})
             st.session_state.computed_cols = file_data.get("computed_cols")
             if new_rules != {}:
@@ -283,6 +286,7 @@ def update_num_conditions():
     new_n = st.session_state['num_conditions_input']
     # print(new_n)
     st.session_state.num_conditions = new_n 
+    
 
 def update_rhs_kind():
     new_val = st.session_state[f'rhs_kind_input_{i}']
@@ -382,10 +386,8 @@ for i in range(int(st.session_state.num_indicators)):
             "timeframe": tf,
             "bb_params": bb_params,
             "macd_params": macd_params,
-            "ref_val": "close"
+            "ref_val": st.session_state.get(f'ref_{i}', 'close')
         }
-        if ref:
-            params_dict["ref_val"] = ref
         if ind in line_indicators:
             params_dict["color"] = color
         print(f"params_dict: {params_dict}")
@@ -401,8 +403,8 @@ computed_cols = st.session_state.computed_cols  # exact column names we compute;
 # which indicators will get separate subplots
 oscillator_set = {"RSI","ATR","MACD","ADX","STOCH","CCI","MFI","TRIX","ROC","OBV"}
 
-for cfg in st.session_state.indicator_configs:
-    print("405. config: ", cfg)
+for i, cfg in enumerate(st.session_state.indicator_configs):
+    print(f"405. {i} config: ", cfg)
     ind = cfg["type"]
     period = cfg.get("period")
     tf = cfg.get("timeframe")
@@ -416,7 +418,8 @@ for cfg in st.session_state.indicator_configs:
     if ind in moving_averages:
         ref_val = st.session_state.get(f"ref_{i}", "close")
         col_base = f"{ind}_{ref_val}_{period}_{tf}"
-    
+    to_copy = []
+    print('419 ', col_base)
     try:
         if ind == "SMA":
             src[col_base] = talib.SMA(src[ref_val], timeperiod=int(period))
@@ -489,10 +492,12 @@ for cfg in st.session_state.indicator_configs:
     except Exception as e:
         st.sidebar.warning(f"Failed computing {ind} ({period}) on TF {tf}: {e}")
         continue
-
-    # align computed columns into main chart index
-    to_copy = [c for c in src.columns if str(c).startswith(col_base)]
+    else:
+        to_copy.append(col_base)
+        
+        
     for c in to_copy:
+        print("496 to_copy: ", to_copy)
         try:
             data[c] = src[c].reindex(data.index, method="ffill")
         except Exception:
@@ -507,6 +512,7 @@ st.markdown("## 🧩 Condition Builder")
 if not "num_conditions_input" in st.session_state: 
     st.session_state.setdefault("num_conditions_input", 0)
     st.session_state.setdefault("num_conditions", 0)
+st.session_state.computed_cols = list(data.columns)
 available_cols_cond = st.session_state.get("computed_cols", []) 
 # available_cols_cond.append( st.session_state.get("computed_cols"))
 with st.expander("Create conditions (LHS op RHS). RHS can be a number or an indicator. Default RHS = Price", expanded=True):
@@ -523,20 +529,26 @@ with st.expander("Create conditions (LHS op RHS). RHS can be a number or an indi
         connector_options = ["AND","OR"]
         rhs_kind_options = ["Indicator", "Number"]
         rhs_kind = f'rhs_kind_{i}'
+        rhs = st.session_state.get(f'rhs_{i}', available_cols_cond[0])
+        lhs = st.session_state.get(f'lhs_{i}', available_cols_cond[0]) 
+        if rhs not in available_cols_cond:
+            rhs = available_cols_cond[0]
+        elif lhs not in available_cols_cond:
+            lhs = available_cols_cond[0]
         if rhs_kind: 
             r_kind = 0
         else: 
             r_kind = 1
-        print(f'lhs, rhs: {st.session_state[f"lhs_{i}"]}"], {st.session_state[f"rhs_{i}"]}"]')
-        lhs = a.selectbox(f"LHS {i+1}", options=available_cols_cond, index=available_cols_cond.index(st.session_state.get(f'lhs_{i}',available_cols_cond[0])), key=f"lhs_{i}")
+        # print(f'lhs, rhs: {st.session_state[f"lhs_{i}"]}"], {st.session_state[f"rhs_{i}"]}"]')
+        lhs = a.selectbox(f"LHS {i+1}", options=available_cols_cond, index=available_cols_cond.index(lhs), key=f"lhs_{i}")
         op = b.selectbox(f"Op {i+1}", options=op_options ,index=op_options.index(st.session_state.get(f'op_{i}', op_options[0])),  key=f"op_{i}")
         rhs_kind = c.selectbox(f"RHS kind {i+1}", options=rhs_kind_options, index=r_kind, key=f"rhs_kind_input_{i}", on_change=update_rhs_kind)
         if rhs_kind == "Number":
-            rhs_val = c.number_input(f"Value {i+1}", value=st.session_state.get(f"rhs_num_{i}"), key=f"rhs_num_{i}")
+            rhs_val = c.number_input(f"Value {i+1}", value=st.session_state.get(f"rhs_num_{i}", 0), key=f"rhs_num_{i}")
             rhs = float(rhs_val)
             rhs_is_num = True
         else:
-            rhs = c.selectbox(f"RHS {i+1}", options=available_cols_cond, index=available_cols_cond.index(st.session_state.get(f'rhs_{i}', available_cols_cond[0])), key=f"rhs_{i}")
+            rhs = c.selectbox(f"RHS {i+1}", options=available_cols_cond, index=available_cols_cond.index(rhs), key=f"rhs_{i}")
             rhs_is_num = False
 
         new_cond_specs.append((lhs, op, rhs, rhs_is_num))
@@ -553,16 +565,19 @@ if st.session_state.connectors != new_connectors:
 
 # ---------- Evaluate Conditions (NaN-safe, bitwise-safe) ----------
 final_mask = None
+st.session_state.computed_cols = list(data.columns)
 if int(st.session_state.num_conditions) > 0 and evaluate_btn:
     # build safe arrays for all available columns (price + computed)
     vars_safe = {}
     # print(f'available_cols_cond: {available_cols_cond}')
     for col in st.session_state.computed_cols:
+        print("561.",  list(data.columns))
         if col in data.columns:
             arr = data[col].values.astype(float)
             arr = np.nan_to_num(arr, nan=0.0)  # replace NaN with 0 for safe comparisons
             vars_safe[col] = arr
         else:
+            print('zeros')
             # column missing (shouldn't happen) -> zeros
             vars_safe[col] = np.zeros(len(data), dtype=float)
 
@@ -701,9 +716,14 @@ def update_rhs_kind_for_rule(i, x, y):
         return    
     st.session_state[f'rhs_kind_{i}_{x}_{y}'] = False    
 
-st.markdown(f'# YOUR BACKTESTER')    
+st.markdown(f'# YOUR BACKTESTER')
+cash = st.number_input("CASH", key="cash", value=st.session_state.get('cash', 10000))    
+brokerage = st.number_input("Brokerage Commission: 0.04%", key="brokerage", value=st.session_state.get('brokerage', 0.04))
+slippage = st.number_input("Slippage: 0.01%", key="slippage", value=st.session_state.get('slippage', 0.01))
+
 for x in strategy_rules.keys():
     st.markdown(f'## Define the rules for {x}')
+    print("708.",  list(data.columns))
     for y in strategy_rules[x].keys():
         if y == "EXIT":
             # st.markdown(strategy_rules[x.upper()]["ENTRY"]["conditions"], len(strategy_rules[x.upper()]["ENTRY"]["conditions"]))
@@ -715,7 +735,7 @@ for x in strategy_rules.keys():
         # build dropdown list that contains only the indicators the user added + Price
             x = x.lower()
             y = y.lower()
-            available_cols_cond = st.session_state.computed_cols
+            available_cols_cond = list(data.columns) 
             
             # number of conditions
             num_rules_input = st.number_input(
@@ -785,7 +805,12 @@ c_json = {
     "chart": {
         "interval": st.session_state.chart_interval,
         "period": st.session_state.chart_period
-    } 
+    },
+    "broker": {
+        "slippage": slippage,
+        "brokerage": brokerage,
+        "cash": cash
+    }
 }
 config_json = json.dumps(c_json, indent=4)
 config_file_name = st.sidebar.text_input("Enter the config file name: ", value="config")
@@ -802,7 +827,7 @@ from my_backtester import backtest, DynamicStrategy, get_detailed_metrics, plot_
 if backtest_btn:
     # st.markdown(strategy_rules)                    
     # st.markdown(data.columns)
-    strat = backtest(data, DynamicStrategy, 10000, data.columns, strategy_rules)
+    strat = backtest(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=brokerage, slippage=slippage)
     metrics, portfolio_values = get_detailed_metrics(strat)
     metrics_df = pd.DataFrame({'metric':metrics.keys(), 'value': metrics.values()})
     # st.markdown(metrics_df)

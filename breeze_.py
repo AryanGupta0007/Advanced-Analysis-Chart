@@ -6,7 +6,8 @@ import pandas as pd
 # Replace 'delimiter_here' with your actual delimiter, e.g., '\t' for tab, '|' for pipe, ',' for comma
 symbol_df = pd.read_csv('ICICIFULL.csv')
 # print(symbol_df)
-all_symbols = symbol_df[' "ExchangeCode"'] 
+eq_symbols = symbol_df[symbol_df[' "Series"'] == 'EQ']
+all_symbols = eq_symbols[' "ExchangeCode"']  
 # print(list(all_symbols))
 # sys.exit()
 breeze = BreezeConnect(api_key=BREEZE_API_KEY)
