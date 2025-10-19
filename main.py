@@ -351,7 +351,6 @@ for x in strategy_rules.keys():
                 'connectors': new_connectors
             }
             
-backtest_btn = st.button("Backtest Strategy")
         
 # if backtest_btn:
         
@@ -386,12 +385,85 @@ st.sidebar.download_button(
 )
 
 
+number_of_symbols = st.number_input("Number of Symbols", key="num_sym", value=st.session_state.get("num_sym", 0))
+
+for i in range(1, number_of_symbols+1):
+    if f"input_{i}" not in st.session_state:
+        st.session_state[f"input_{i}"] = ""
+
+# Build a 4x4 grid of text inputs
+for row in range(4):
+    cols = st.columns(4)
+    for col_idx, col in enumerate(cols):
+        num = row * 4 + col_idx + 1
+        if num > number_of_symbols:
+            break
+        with col:
+            st.selectbox(
+                f"Symbol {num}",
+                symbols_tuple,
+                index=symbols_tuple.index(st.session_state.get(f"symbol_{num}_key", "ADANIENT")),
+                key=f"symbol_{num}_key"
+            )
+
+backtest_btn = st.button("Backtest Strategy")
 import matplotlib.pyplot as plt
-from my_backtester import backtest, DynamicStrategy, get_detailed_metrics, plot_candles_with_entries_and_exits, plot_strategy_metrics
+from my_backtester import backtest, DynamicStrategy, get_detailed_metrics, plot_strategy_metrics
+
+
+def fetch_data_and_compute_indicators(symbol, chart_interval=st.session_state.chart_interval, days=days):
+    data_1m = fetch_historical(symbol, days=3)
+    unique_dates = np.unique(data_1m.index.date)
+    last_trading_days = unique_dates[-days:]
+    df = data_1m[np.isin(data_1m.index.date, last_trading_days)].copy()
+    chart_interval = interval_map[chart_interval]
+    # keep trading hours (if intraday) and drop zero-volume days
+    try:
+        df = df.between_time("09:15", "15:30")
+    except Exception:
+        # non intraday index - ignore
+        pass
+    df = df[df.groupby(df.index.date)["volume"].transform("sum") > 0]
+
+    # resample to chart interval for display
+    data = resample_candles(df, chart_interval)
+    all_cols, data = compute_indicators(data, indicator_config=st.session_state.indicator_configs, moving_averages=moving_averages, chart_interval=chart_interval, df=df)
+    
+    return data 
+
+
 if backtest_btn:
-    # st.markdown(strategy_rules)                    
-    # st.markdown(data.columns)
-    strat = backtest(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=brokerage, slippage=slippage)
+    symbols_to_backtest = []
+    progress = st.progress(0, text="Running backtests...")
+    
+    for x in range(st.session_state.get("num_sym", 0)):
+        num = x + 1
+        symbol_to_fetch = st.session_state.get(f"symbol_{num}_key", "ADANIENT")
+        data = fetch_data_and_compute_indicators(symbol_to_fetch)
+        st.session_state.data_store[symbol_to_fetch] = data
+        strat = backtest(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=brokerage, slippage=slippage)
+        st.session_state.strats[symbol_to_fetch] = strat
+        progress.progress((x + 1) / number_of_symbols)
+    print('448', st.session_state.strats)
+    progress.empty()
+    st.success("✅ Backtests completed successfully!")
+
+for i in range(1, number_of_symbols, 4):
+    cols = st.columns(4)
+    for j, col in enumerate(cols):
+        page_num = i + j
+        if page_num <= number_of_symbols:
+            label = st.session_state.get(f"symbol_{page_num}_key", "ADANIENT")
+            if col.button(label, key=f"btn_{label}"):
+                st.session_state["current_page"] = label
+
+
+if "current_page" in st.session_state:
+    symbol = st.session_state.get("current_page")
+    print('463', symbol)
+    print('464', st.session_state.strats[symbol])
+    strat = st.session_state.strats[symbol]
+    data = st.session_state.data_store[symbol]
     metrics, portfolio_values = get_detailed_metrics(strat)
     metrics_df = pd.DataFrame({'metric':metrics.keys(), 'value': metrics.values()})
     # st.markdown(metrics_df)
@@ -399,16 +471,21 @@ if backtest_btn:
     figs = plot_strategy_metrics(metrics)
     for fig in figs:
         st.pyplot(fig)
-
-    
-    
     entries = strat.entries 
     exits = strat.exits
-    
+    current_conds = strat.current_conditions 
+    entry_dates, entry_prices = [entry[0] for entry in entries], [entry[1] for entry in entries] 
+    cond_dates, cond_smas, cond_closes, cond_labels = [cond[0] for cond in current_conds], [cond[2] for cond in current_conds], [cond[1] for cond in current_conds], [cond[3] for cond in current_conds]
+    entries_df = pd.DataFrame({
+        'dt': entry_dates, 'price': entry_prices 
+    })
+    cond_df = pd.DataFrame({
+        'dt': cond_dates, 'sma': cond_smas, 'close': cond_closes, 'label': cond_labels
+    })
         
-    fig = plot_candles_with_entries_and_exits(data, entries, exits)
+    fig = plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_configs, final_mask, entries, exits, symbol=symbol, period_str=period_str, interval_label=interval_label) 
     st.plotly_chart(fig, use_container_width=True)
-    
+
     portfolio_values = portfolio_values.set_index("datetime")
     portfolio_values.index = pd.to_datetime(portfolio_values.index)
     # portfolio_values.drop(0)
@@ -418,3 +495,6 @@ if backtest_btn:
     plt.ylabel('Value')
     plt.title('Portfolio Value over Time')
     plt.show()
+
+        
+                    

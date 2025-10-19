@@ -4,7 +4,6 @@ import pandas as pd
 import mplfinance as mpf
 import matplotlib.pyplot as plt
 
-
 def create_pandasdata_class(custom_columns):
     """
     Dynamically create a custom PandasData subclass
@@ -49,6 +48,7 @@ class DynamicStrategy(bt.Strategy):
         self.short_exit_condition  = None
         self.portfolio_values, self.entries, self.exits = [], [], []
         self.order = None
+        self.current_conditions = []
         # Operator mappings
         self.get_op = {
             '>': operator.gt,
@@ -71,12 +71,14 @@ class DynamicStrategy(bt.Strategy):
                 self.rules["LONG"]["ENTRY"]["conditions"],
                 self.rules["LONG"]["ENTRY"]["connectors"]
             )
+            print(f'long entry condition: {self.long_entry_condition}')
         # Long exit
         if self.rules["LONG"]["EXIT"]["conditions"]:
             self.long_exit_condition = self.build_rule(
                 self.rules["LONG"]["EXIT"]["conditions"],
                 self.rules["LONG"]["EXIT"]["connectors"]
             )
+            print(f'long exit condition: {self.long_exit_condition}')
         # Short entry
         if self.rules["SHORT"]["ENTRY"]["conditions"]:
             self.short_entry_condition = self.build_rule(
@@ -112,7 +114,7 @@ class DynamicStrategy(bt.Strategy):
 
             connector = connectors[i-1]  # connectors are one less than conditions
             final_cond = self.bt_logical_op[connector](final_cond, next_cond)
-
+        
         return final_cond
 
     def log(self, msg):
@@ -156,14 +158,16 @@ class DynamicStrategy(bt.Strategy):
         # Long entry
         if self.position.size == 0:
             if self.long_entry_condition is not None and self.long_entry_condition[0]:
+                self.current_conditions.append((dt, self.data.close[0], self.data.SMA_close_20_1T[0], "ENTRY"))
                 self.log(f"{dt} - Long Entry Triggered")
-                self.buy(size=(self.broker.get_value()//self.data.close), exectype=bt.Order.Market)
+                self.buy(size=1, exectype=bt.Order.Market)
             
             elif self.short_entry_condition is not None and self.short_entry_condition[0]:
                 self.log(f"{dt} - Short Entry Triggered")
-                self.buy(size=(self.broker.get_value()//self.data.close), exectype=bt.Order.Market)
+                self.buy(size=1, exectype=bt.Order.Market)
 
         if self.position.size > 0 and self.long_exit_condition is not None and  self.long_exit_condition[0]:
+            self.current_conditions.append((dt, self.data.close[0], self.data.SMA_close_20_1T[0], "EXIT"))
             self.log(f"{dt} - Long Exit Triggered")
             self.close()
 
