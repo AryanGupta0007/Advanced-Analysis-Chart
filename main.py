@@ -240,7 +240,7 @@ def perform_operation(data, name, lhs, operator, operation_kind, rhs, **kwargs):
     print("237", data[name].head())
     return data 
             
-with st.expander("Create a custom column by operating on the available columns, The calculation will be from left to right Ex: 4 + 5 * 9 => (4+5) * 9 => 81"):
+with st.expander("## Create a custom column"):
     # available_cols_cond = st.session_state.get("computed_cols", list(data.columns))
     num_operations = st.number_input("Enter the number of operands for the operation", value=st.session_state.get('num_operations'), key='num_operations')
     rhs_kind_options = ['Number', 'Column']
@@ -544,7 +544,7 @@ if backtest_btn:
         data = fetch_data_and_compute_indicators(symbol_to_fetch)
         
         st.session_state.data_store[symbol_to_fetch] = data
-        strat = backtest(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=brokerage, slippage=slippage)
+        strat = backtest(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=0.0001, slippage=0.0001)
         st.session_state.strats[symbol_to_fetch] = strat
         progress.progress((x + 1) / number_of_symbols)
     print('448', st.session_state.strats)

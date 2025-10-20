@@ -87,6 +87,7 @@ class DynamicStrategy(bt.Strategy):
             )
         # Short exit
         if  self.rules["SHORT"]["ENTRY"]["conditions"]:
+            
             self.short_exit_condition = self.build_rule(
                 self.rules["SHORT"]["EXIT"]["conditions"],
                 self.rules["SHORT"]["EXIT"]["connectors"]
@@ -135,7 +136,6 @@ class DynamicStrategy(bt.Strategy):
             
             elif order.issell():
                 if self.position.size < 0:
-                    self.entries.append((dt, self.data.close[0], "SHORT"))
                     self.log(f'SHORT PLACED AT {self.entry_price} on {dt}')
                 
                 else:
