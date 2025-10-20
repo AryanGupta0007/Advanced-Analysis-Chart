@@ -29,6 +29,7 @@ strategy_rules = {
 }
 
 def set_defaults():
+    st.session_state.setdefault('operator_config', [])
     st.session_state.setdefault("data_store", {})    
     st.session_state.setdefault("strats", {})
     st.session_state.setdefault("chart_period", "1d")
@@ -41,6 +42,7 @@ def set_defaults():
     st.session_state.setdefault("indicator_configs", [])
     st.session_state.setdefault("connectors", [])
     st.session_state.setdefault("cond_specs", [])
+    st.session_state.setdefault("num_operations", 0)
     
 
 
@@ -62,6 +64,17 @@ def set_defaults():
 
     # if st.session_state.num_indicators 
         # ---------- Rest of your code continues unchanged ----------
+    for i in range(st.session_state['num_operations']):
+        row_key = f'custom_col_{i}'
+        st.session_state.setdefault(f'name_{row_key}', 'default')
+        st.session_state.setdefault(f'lhs_{row_key}', "close")
+        st.session_state.setdefault(f'operation_kind_{row_key}', "Arithematic")
+        st.session_state.setdefault(f'operation_{row_key}', "+")
+        st.session_state.setdefault(f'rhs_kind_{row_key}', "Number")
+        st.session_state.setdefault(f'rhs_num_{row_key}', 0)
+        st.session_state.setdefault(f'rhs_col_{row_key}', 'close')
+        st.session_state.setdefault(f'mathematical_operation_{row_key}', 'mean')
+
     for i in range(st.session_state["num_indicators"]):
         st.session_state.setdefault(f"type_{i}", "SMA")
         st.session_state.setdefault(f"ref_{i}", "close")

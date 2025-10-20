@@ -91,6 +91,7 @@ def update_rhs_kind():
 
 indicator_configs = st.session_state.get("indicator_configs")
 new_configs = []
+
 for i in range(int(st.session_state.num_indicators)):
     print(f"215: {indicator_configs} {st.session_state[f"type_{i}"]}")
     exp_key = f"find_expander_{i}"
@@ -201,6 +202,95 @@ for col in all_cols:
         st.session_state.computed_cols.append(col)
 print(f"408 {st.session_state.computed_cols}")
 st.markdown("## 🧩 Condition Builder")
+
+def perform_suitable_arithematic(lhs, rhs, operator):
+    if operator == "+":
+        return rhs + lhs
+    elif operator == "-":
+        return rhs - lhs 
+    elif operator == "*":
+        return rhs * lhs 
+    elif operator == "/":
+        return lhs / rhs
+
+def perform_operation(data, name, lhs, operator, operation_kind, rhs, **kwargs):
+    col = data[lhs]
+    result = None
+    print("218", name, lhs, operator, operation_kind, rhs)
+    if (operation_kind == 'Statistical'):
+        
+        if rhs == 'mean':
+            result = col.mean()
+            print("233:", result)
+        elif rhs == 'std':
+            result = col.std()
+            
+    elif (operation_kind == 'Arithematic'):
+        rhs_kind = kwargs.get('rhs_kind')
+            
+        if rhs_kind == "Number":
+            result = perform_suitable_arithematic(col, rhs=rhs, operator=operator)
+        
+        elif rhs_kind == "Column":
+            rhs = data[rhs]
+            result = perform_suitable_arithematic(col, rhs=rhs, operator=operator)
+        
+
+    data[name] = result
+    print("237", data[name].head())
+    return data 
+            
+with st.expander("Create a custom column by operating on the available columns, The calculation will be from left to right Ex: 4 + 5 * 9 => (4+5) * 9 => 81"):
+    # available_cols_cond = st.session_state.get("computed_cols", list(data.columns))
+    num_operations = st.number_input("Enter the number of operands for the operation", value=st.session_state.get('num_operations'), key='num_operations')
+    rhs_kind_options = ['Number', 'Column']
+    operation_kind_options = ['Arithematic', 'Statistical']
+    operators_options = ['+', '-', '*', '/']
+    mathematical_operations_options = ['mean', 'std']
+    operator_config = st.session_state.get('operator_config')
+    operator_params = [] 
+    
+    for i in range(st.session_state.get('num_operations', 0)):
+        row_key = f'custom_col_{i}'
+        a, b, c, d, e, f = st.columns([3, 3, 5, 5, 5,2])
+        col_name = a.text_input("Enter a unique custom column name ", value=st.session_state.get(f'name_{row_key}', "unique column name"), key=f'name_{row_key}')
+        lhs_val = st.session_state.get(f'lhs_{row_key}', available_cols_cond[0])
+        lhs = b.selectbox(f'LHS {i+1}', options=st.session_state['computed_cols'], index=st.session_state['computed_cols'].index(lhs_val), key=f'lhs_{row_key}') 
+        operation_kind = c.selectbox(f'Operator kind {i+1}', options=operation_kind_options, key=f'operation_kind_{row_key}', index=operation_kind_options.index(st.session_state.get(f'operation_kind_{row_key}', operation_kind_options[0]))) 
+        rhs_kind = None
+        operator = None
+        if operation_kind == 'Arithematic':
+            operator = d.selectbox(f'Select Operator {i+1}', options=operators_options, index=operators_options.index(st.session_state.get(f'operation_{row_key}', operators_options[0])), key=f'operation_{row_key}')    
+            rhs_kind = e.selectbox(f'Select kind of RHS {i+1}', options=rhs_kind_options, index=rhs_kind_options.index(st.session_state.get(f'rhs_kind_{row_key}', rhs_kind_options[0])), key=f'rhs_kind_{row_key}')
+            
+            if rhs_kind == 'Number':
+                rhs_val = f.number_input('Enter the value', key=f'rhs_num_{row_key}', value=st.session_state.get(f'rhs_num_{row_key}', 0))
+    
+            elif rhs_kind == 'Column':
+                rhs_val = f.selectbox('Select the column', options=st.session_state['computed_cols'], key=f'rhs_col_{row_key}', index=st.session_state['computed_cols'].index(st.session_state.get(f'rhs_col_{row_key}', available_cols_cond[0])))
+            # data = perform_operation(data, col_name, lhs_val, operator, "arithematic", rhs_val=rhs_val, rhs_kind=rhs_kind)        
+            # print(data[col_name])
+        elif operation_kind == 'Statistical':
+            rhs_val = d.selectbox(f'Select Operator {i+1}', options=mathematical_operations_options, index=mathematical_operations_options.index(st.session_state.get(f'mathematical_operation_{row_key}', mathematical_operations_options[0])), key=st.session_state.get(f'mathematical_operation_{row_key}', mathematical_operations_options[0])) 
+            # data = perform_operation(data, col_name, lhs_val, operator, "mathematical")
+        params = {
+            'name': col_name, 
+            'lhs': lhs,
+            'operator': operator,
+            'rhs': rhs_val,
+            'rhs_kind': rhs_kind,
+            'operator_kind': operation_kind
+        }
+        operator_params.append(params)
+    st.session_state.operator_config = operator_params        
+    operate_btn = st.button('operate')
+
+# if operate_btn:
+for config in st.session_state.get('operator_config', []):
+    data = perform_operation(data, name=config['name'], lhs=config['lhs'], operator=config['operator'], rhs=config['rhs'], operation_kind=config['operator_kind'], rhs_kind=config['rhs_kind'])
+    print("288 ", data[config["name"]].head())
+print('291', list(data.columns))
+st.session_state.computed_cols = list(data.columns)
 
 if not "num_conditions_input" in st.session_state: 
     st.session_state.setdefault("num_conditions_input", 0)
@@ -412,7 +502,7 @@ from my_backtester import backtest, DynamicStrategy, get_detailed_metrics, plot_
 
 
 def fetch_data_and_compute_indicators(symbol, chart_interval=st.session_state.chart_interval, days=days):
-    data_1m = fetch_historical(symbol, days=3)
+    data_1m = fetch_historical(symbol, days=10)
     unique_dates = np.unique(data_1m.index.date)
     last_trading_days = unique_dates[-days:]
     df = data_1m[np.isin(data_1m.index.date, last_trading_days)].copy()
@@ -428,7 +518,9 @@ def fetch_data_and_compute_indicators(symbol, chart_interval=st.session_state.ch
     # resample to chart interval for display
     data = resample_candles(df, chart_interval)
     all_cols, data = compute_indicators(data, indicator_config=st.session_state.indicator_configs, moving_averages=moving_averages, chart_interval=chart_interval, df=df)
-    
+    for config in st.session_state.get('operator_config', []):
+        data = perform_operation(data, name=config['name'], lhs=config['lhs'], operator=config['operator'], rhs=config['rhs'], operation_kind=config['operator_kind'], rhs_kind=config['rhs_kind'])
+
     return data 
 
 
@@ -440,6 +532,7 @@ if backtest_btn:
         num = x + 1
         symbol_to_fetch = st.session_state.get(f"symbol_{num}_key", "ADANIENT")
         data = fetch_data_and_compute_indicators(symbol_to_fetch)
+        
         st.session_state.data_store[symbol_to_fetch] = data
         strat = backtest(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=brokerage, slippage=slippage)
         st.session_state.strats[symbol_to_fetch] = strat
