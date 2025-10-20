@@ -207,7 +207,7 @@ def perform_suitable_arithematic(lhs, rhs, operator):
     if operator == "+":
         return rhs + lhs
     elif operator == "-":
-        return rhs - lhs 
+        return lhs - rhs 
     elif operator == "*":
         return rhs * lhs 
     elif operator == "/":
@@ -271,7 +271,7 @@ with st.expander("Create a custom column by operating on the available columns, 
             # data = perform_operation(data, col_name, lhs_val, operator, "arithematic", rhs_val=rhs_val, rhs_kind=rhs_kind)        
             # print(data[col_name])
         elif operation_kind == 'Statistical':
-            rhs_val = d.selectbox(f'Select Operator {i+1}', options=mathematical_operations_options, index=mathematical_operations_options.index(st.session_state.get(f'mathematical_operation_{row_key}', mathematical_operations_options[0])), key=st.session_state.get(f'mathematical_operation_{row_key}', mathematical_operations_options[0])) 
+            rhs_val = d.selectbox(f'Select Operator {i+1}', options=mathematical_operations_options, index=mathematical_operations_options.index(st.session_state.get(f'mathematical_operation_{row_key}', mathematical_operations_options[0])), key=f'mathematical_operation_{row_key}') 
             # data = perform_operation(data, col_name, lhs_val, operator, "mathematical")
         params = {
             'name': col_name, 
@@ -298,7 +298,7 @@ for config in st.session_state.get('operator_config', []):
         operation_kind=config['operator_kind'],
         rhs_kind=config['rhs_kind']
          )
-    st.write("288 ", data[config["name"]].head())
+    # st.write("288 ", data[config["name"]].head())
 print('291', list(data.columns))
 st.session_state.computed_cols = list(data.columns)
 
