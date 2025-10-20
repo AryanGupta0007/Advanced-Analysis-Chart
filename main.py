@@ -247,12 +247,12 @@ with st.expander("Create a custom column by operating on the available columns, 
     operation_kind_options = ['Arithematic', 'Statistical']
     operators_options = ['+', '-', '*', '/']
     mathematical_operations_options = ['mean', 'std']
-    operator_config = st.session_state.get('operator_config')
-    operator_params = [] 
+    operator_config = st.session_state.get('operator_config', [])
+     
     
     for i in range(st.session_state.get('num_operations', 0)):
         row_key = f'custom_col_{i}'
-        a, b, c, d, e, f = st.columns([3, 3, 5, 5, 5,2])
+        a, b, c, d, e, f = st.columns([5, 3, 5, 5, 5,2])
         col_name = a.text_input("Enter a unique custom column name ", value=st.session_state.get(f'name_{row_key}', "unique column name"), key=f'name_{row_key}')
         lhs_val = st.session_state.get(f'lhs_{row_key}', available_cols_cond[0])
         lhs = b.selectbox(f'LHS {i+1}', options=st.session_state['computed_cols'], index=st.session_state['computed_cols'].index(lhs_val), key=f'lhs_{row_key}') 
@@ -281,14 +281,24 @@ with st.expander("Create a custom column by operating on the available columns, 
             'rhs_kind': rhs_kind,
             'operator_kind': operation_kind
         }
-        operator_params.append(params)
-    st.session_state.operator_config = operator_params        
+        if col_name not in list(data.columns):
+            operator_config.append(params)
     operate_btn = st.button('operate')
 
-# if operate_btn:
+    if operate_btn:
+        st.session_state['operator_config'] = operator_config
+
 for config in st.session_state.get('operator_config', []):
-    data = perform_operation(data, name=config['name'], lhs=config['lhs'], operator=config['operator'], rhs=config['rhs'], operation_kind=config['operator_kind'], rhs_kind=config['rhs_kind'])
-    print("288 ", data[config["name"]].head())
+    data = perform_operation(
+        data,
+        name=config['name'],
+        lhs=config['lhs'],
+        operator=config['operator'],
+        rhs=config['rhs'],
+        operation_kind=config['operator_kind'],
+        rhs_kind=config['rhs_kind']
+         )
+    st.write("288 ", data[config["name"]].head())
 print('291', list(data.columns))
 st.session_state.computed_cols = list(data.columns)
 
