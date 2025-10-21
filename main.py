@@ -247,7 +247,7 @@ with st.expander("## Create a custom column"):
     operation_kind_options = ['Arithematic', 'Statistical']
     operators_options = ['+', '-', '*', '/']
     mathematical_operations_options = ['mean', 'std']
-    operator_config = st.session_state.get('operator_config', [])
+    operator_config = st.session_state.get('custom_cols_config', [])
      
     
     for i in range(st.session_state.get('num_operations', 0)):
@@ -281,14 +281,22 @@ with st.expander("## Create a custom column"):
             'rhs_kind': rhs_kind,
             'operator_kind': operation_kind
         }
-        if col_name not in list(data.columns):
-            operator_config.append(params)
+        for i, config in enumerate(st.session_state.custom_cols_config):
+            name = config.get('name')
+            if name == col_name:
+                
+                config["lhs"] = lhs
+                config["rhs"] = rhs
+                config["rhs_kind"] = rhs_kind
+                config["operator_kind"] = operator_kind
+                
     operate_btn = st.button('operate')
 
     if operate_btn:
-        st.session_state['operator_config'] = operator_config
+        print('equating', data.columns)
+        st.session_state['custom_cols_config'] = operator_config
 
-for config in st.session_state.get('operator_config', []):
+for config in st.session_state.get('custom_cols_config', []):
     data = perform_operation(
         data,
         name=config['name'],
@@ -368,7 +376,8 @@ if int(st.session_state.num_conditions) > 0 and evaluate_btn:
 # ---------- Build Plot (price + oscillator subplots) ----------
 # choose oscillator cfgs for separate subplots
 indicator_configs = st.session_state["indicator_configs"]
-fig = plot_charts_and_indicators(data=data, chart_interval=chart_interval, indicator_configs=st.session_state.indicator_configs, final_mask=final_mask, symbol=symbol, period_str=period_str, interval_label=interval_label)
+custom_cols_config = st.session_state["custom_cols_config"]
+fig = plot_charts_indicators_and_cols(data=data, chart_interval=chart_interval, indicator_configs=st.session_state.indicator_configs, custom_cols_config=custom_cols_config, final_mask=final_mask, symbol=symbol, period_str=period_str, interval_label=interval_label)
 st.plotly_chart(fig, use_container_width=True)
 
 def update_num_rules(x, y):
@@ -528,7 +537,8 @@ def fetch_data_and_compute_indicators(symbol, chart_interval=st.session_state.ch
     # resample to chart interval for display
     data = resample_candles(df, chart_interval)
     all_cols, data = compute_indicators(data, indicator_config=st.session_state.indicator_configs, moving_averages=moving_averages, chart_interval=chart_interval, df=df)
-    for config in st.session_state.get('operator_config', []):
+    print(st.session_state.get('custom_cols_config'))
+    for config in st.session_state.get('custom_col_config', []):
         data = perform_operation(data, name=config['name'], lhs=config['lhs'], operator=config['operator'], rhs=config['rhs'], operation_kind=config['operator_kind'], rhs_kind=config['rhs_kind'])
 
     return data 
@@ -544,7 +554,7 @@ if backtest_btn:
         data = fetch_data_and_compute_indicators(symbol_to_fetch)
         
         st.session_state.data_store[symbol_to_fetch] = data
-        strat = backtest(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=0.0001, slippage=0.0001)
+        strat = backtest(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=0.01 * float(brokerage) , slippage=0.01 * float(slippage))
         st.session_state.strats[symbol_to_fetch] = strat
         progress.progress((x + 1) / number_of_symbols)
     print('448', st.session_state.strats)
@@ -586,7 +596,7 @@ if "current_page" in st.session_state:
         'dt': cond_dates, 'sma': cond_smas, 'close': cond_closes, 'label': cond_labels
     })
         
-    fig = plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_configs, final_mask, entries, exits, symbol=symbol, period_str=period_str, interval_label=interval_label) 
+    fig = plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_configs, final_mask, entries, exits, symbol=symbol, period_str=period_str, interval_label=interval_label, custom_cols_config=st.session_state.get('custom_cols_config')) 
     st.plotly_chart(fig, use_container_width=True)
 
     portfolio_values = portfolio_values.set_index("datetime")

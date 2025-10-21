@@ -274,9 +274,8 @@ def evaluate_conditions(data, computed_cols, cond_specs, connectors):
             final_mask = final_mask | masks[idx + 1]
     return final_mask
 
-def plot_charts_and_indicators(data, chart_interval, indicator_configs, final_mask, **kwargs):
+def plot_charts_indicators_and_cols(data, chart_interval, indicator_configs, final_mask, **kwargs):
     oscillator_cfgs = [cfg for cfg in indicator_configs if cfg["type"] in oscillator_set]
-
     rows = 1 + len(oscillator_cfgs)
     if rows == 1:
         row_heights = [1.0]
@@ -288,6 +287,16 @@ def plot_charts_and_indicators(data, chart_interval, indicator_configs, final_ma
     ]
 
     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=row_heights, subplot_titles=subplot_titles)
+
+    # custom_cols_config = kwargs.get('custom_cols_config', None)
+    # if custom_cols_config:
+    #     for config in custom_cols_config:
+    #         col_base = config.get('name')
+    #         fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.5)), row=1, col=1)
+
+            
+             
+
 
     # Price (row 1)
     fig.add_trace(go.Candlestick(x=data.index, open=data["open"], high=data["high"], low=data["low"], close=data["close"], name="Price"), row=1, col=1)
@@ -507,6 +516,12 @@ def plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_
     ]
 
     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=row_heights, subplot_titles=subplot_titles)
+
+    # custom_cols_config = kwargs.get('custom_cols_config', None)
+    # if custom_cols_config:
+    #     for config in custom_cols_config:
+    #         col_base = config.get('name')
+    #         fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.5)), row=1, col=1)
 
     # Price (row 1)
     fig.add_trace(go.Candlestick(x=data.index, open=data["open"], high=data["high"], low=data["low"], close=data["close"], name="Price"), row=1, col=1)
