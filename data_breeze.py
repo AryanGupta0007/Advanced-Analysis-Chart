@@ -2,7 +2,7 @@ import pandas as pd
 import datetime
 import re
 from breeze_ import *
-from angel_one_funcs import *
+# from angel_one_funcs import *
 
 EXCHANGE = "NSE"
 
@@ -15,27 +15,6 @@ symbols = list(symbols_tuple)
 # connectFeed(SMART_WEB, symbols=symbols)
 
 
-
-def resample_candles(df, interval="5T"):
-    """
-    Resample intraday 1-minute data to a larger timeframe.
-    
-    Parameters:
-        df (pd.DataFrame): 1-minute OHLCV data
-        interval (str): Pandas offset alias ('5T' = 5 min, '15T', '30T', '1H', '1D')
-    
-    Returns:
-        pd.DataFrame: resampled OHLCV data
-    """
-    ohlc_dict = {
-        'open': 'first',
-        'high': 'max',
-        'low': 'min',
-        'close': 'last',
-        'volume': 'sum'
-    }
-    df_resampled = df.resample(interval).agg(ohlc_dict).dropna()
-    return df_resampled
 
 # --- Helper function to clean numeric values ---
 def clean_numeric(x):

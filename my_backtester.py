@@ -176,9 +176,157 @@ class DynamicStrategy(bt.Strategy):
             self.close()
 
                 
+import backtrader as bt
+import operator
+
+class MultiAssetDynamicStrategy(bt.Strategy):
+    params = (("strategy_rules", None),)
+
+    def __init__(self):
+        self.rules = self.p.strategy_rules
+        self.get_op = {
+            '>': operator.gt,
+            '<': operator.lt,
+            '>=': operator.ge,
+            '<=': operator.le
+        }
+        self.bt_logical_op = {
+            'AND': bt.And,
+            'OR': bt.Or
+        }
+
+        # Store conditions per data feed
+        self.long_entry_condition = {}
+        self.long_exit_condition = {}
+        self.short_entry_condition = {}
+        self.short_exit_condition = {}
+
+        self.portfolio_values, self.entries, self.exits = [], [], []
+        self.order = {d: None for d in self.datas}
+        self.current_conditions = []
+
+        # Build rules for each data feed
+        for d in self.datas:
+            self.build_conditions(d)
+
+    def build_conditions(self, data):
+        """Build rules dynamically for each data feed"""
+        rules = self.rules
+
+        def build_rule(conds, connectors):
+            if not conds:
+                return None
+            lhs, op, rhs, rhs_is_num = conds[0]
+            lhs_line = getattr(data.lines, lhs)
+            rhs_val = rhs if rhs_is_num else getattr(data.lines, rhs)
+            final_cond = self.get_op[op](lhs_line, rhs_val)
+
+            for i in range(1, len(conds)):
+                lhs, op, rhs, rhs_is_num = conds[i]
+                lhs_line = getattr(data.lines, lhs)
+                rhs_val = rhs if rhs_is_num else getattr(data.lines, rhs)
+                next_cond = self.get_op[op](lhs_line, rhs_val)
+                connector = connectors[i-1]
+                final_cond = self.bt_logical_op[connector](final_cond, next_cond)
+            return final_cond
+
+        # Assign rules for this data
+        if rules["LONG"]["ENTRY"]["conditions"]:
+            self.long_entry_condition[data] = build_rule(
+                rules["LONG"]["ENTRY"]["conditions"],
+                rules["LONG"]["ENTRY"]["connectors"]
+            )
+
+        if rules["LONG"]["EXIT"]["conditions"]:
+            self.long_exit_condition[data] = build_rule(
+                rules["LONG"]["EXIT"]["conditions"],
+                rules["LONG"]["EXIT"]["connectors"]
+            )
+        if rules["SHORT"]["ENTRY"]:    
+            if rules["SHORT"]["ENTRY"]["conditions"]:
+                self.short_entry_condition[data] = build_rule(
+                    rules["SHORT"]["ENTRY"]["conditions"],
+                    rules["SHORT"]["ENTRY"]["connectors"]
+                )
+        if rules["SHORT"]["EXIT"]:
+            if rules["SHORT"]["EXIT"]["conditions"]:
+                self.short_exit_condition[data] = build_rule(
+                    rules["SHORT"]["EXIT"]["conditions"],
+                    rules["SHORT"]["EXIT"]["connectors"]
+                )
+
+    def log(self, msg):
+        dt = self.datas[0].datetime.datetime(0)
+        print(f'{dt}: {msg}')
+
+    def notify_order(self, order):
+        if order.status == order.Completed:
+            dt = order.data.datetime.datetime(0)
+            pos = self.getposition(order.data)
+            if order.isbuy():
+                if pos.size > 0:
+                    self.entries.append((dt, order.data._name, order.executed.price, "LONG"))
+                    self.log(f"BUY executed for {order.data._name} at {order.executed.price}")
+                else:
+                    # If you sold previously and now buy back, it's effectively a short exit
+                    self.exits.append((dt, order.data._name, order.executed.price, "SHORT"))
+                    self.log(f"SHORT EXIT executed for {order.data._name} at {order.executed.price}")
+
+            elif order.issell():
+                if pos.size < 0:
+                    self.entries.append((dt, order.data._name, order.executed.price, "SHORT"))
+                    self.log(f"SELL executed for {order.data._name} at {order.executed.price}")
+                else:
+                    self.exits.append((dt, order.data._name, order.executed.price, "LONG"))
+                    self.log(f"LONG EXIT executed for {order.data._name} at {order.executed.price}")
+            
+        elif order.status in [order.Rejected, order.Margin, order.Cancelled]:
+            self.log(f"Order {order.data._name} REJECTED/MARGIN/CANCELLED")
+
+        self.order[order.data] = None
+
+    def next(self):
+        self.portfolio_values.append({
+            'datetime': self.datetime.datetime(0),
+            'value': self.broker.get_value()
+        })
+
+        for d in self.datas:
+            dt = d.datetime.date(0)
+            pos = self.getposition(d)
+
+            if self.order[d]:
+                continue  # skip if pending order
+
+            # --- Long Entry ---
+            if pos.size == 0 and d in self.long_entry_condition:
+                if self.long_entry_condition[d] is not None and self.long_entry_condition[d][0]:
+                    self.log(f"{dt} - Long Entry on {d._name}")
+                    self.order[d] = self.buy(data=d, size=1)
+
+            # --- Short Entry ---
+            if pos.size == 0 and d in self.short_entry_condition:
+                if self.short_entry_condition[d] is not None and self.short_entry_condition[d][0]:
+                    self.log(f"{dt} - Short Entry on {d._name}")
+                    self.order[d] = self.sell(data=d, size=1)
+
+            # --- Long Exit ---
+            if pos.size > 0 and d in self.long_exit_condition:
+                if self.long_exit_condition[d] is not None and self.long_exit_condition[d][0]:
+                    self.log(f"{dt} - Long Exit on {d._name}")
+                    self.order[d] = self.close(data=d)
+
+            # --- Short Exit ---
+            if pos.size < 0 and d in self.short_exit_condition:
+                if self.short_exit_condition[d] is not None and self.short_exit_condition[d][0]:
+                    self.log(f"{dt} - Short Exit on {d._name}")
+                    self.order[d] = self.close(data=d)
+
+                
 
 
-def backtest(df, strategy_cls, initial_cash, custom_cols, strategy_rules, commission=0.04, slippage=0.1):
+
+def backtest_single_asset(df, strategy_cls, initial_cash, custom_cols, strategy_rules, commission=0.04, slippage=0.1):
     cerebro = bt.Cerebro()
     cerebro.broker.set_slippage_perc(slippage)  # 0.1% slippage
     cerebro.broker.set_coc(True)  # Market orders execute on current bar close
@@ -207,6 +355,87 @@ def backtest(df, strategy_cls, initial_cash, custom_cols, strategy_rules, commis
     results = cerebro.run()
     strat = results[0]
     return strat
+
+def backtest_multiple_assets(dfs, strategy_cls, initial_cash, custom_cols, strategy_rules, commission=0.04, slippage=0.1):
+    cerebro = bt.Cerebro()
+    cerebro.broker.set_slippage_perc(slippage)  # 0.1% slippage
+    cerebro.broker.set_coc(True)  # Market orders execute on current bar close
+
+    # cerebro.addstrategy(strategy_cls, adx_mean=df['ADX_14'].mean(), adx_std=df['ADX_14'].std(), diff_mean=(df['DMN_14'] - df['DMP_14']).mean(), diff_std=(df['DMN_14'] - df['DMP_14']).std() )
+    # cerebro.addstrategy(strategy_cls, vwap_mean=df_filtered['vwap'].mean(), vwap_std=df_filtered['vwap'].std())
+    cerebro.addstrategy(strategy_cls, strategy_rules=strategy_rules)
+    # Load data
+    DynamicDataClass = create_pandasdata_class(custom_cols)
+
+# Now you can use it like a normal Backtrader data feed
+    for df in dfs:
+        data = DynamicDataClass(dataname=df[0], name=df[1])
+        cerebro.adddata(data)
+
+    # Broker
+    cerebro.broker.setcash(initial_cash)
+    cerebro.broker.setcommission(commission=commission)
+    cerebro.broker.set_shortcash(True)  # allow shorts
+
+    # Portfolio-wide analyzers
+    cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name='sharpe', timeframe=bt.TimeFrame.Days, annualize=True)
+    cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
+
+    # Per-asset trade analyzers
+    # for d in cerebro.datas:
+    #     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name=f"trades_{d._name}", data=d)
+
+    results = cerebro.run()
+    strat = results[0]
+
+    # --- Portfolio-wide results ---
+    portfolio_metrics = {
+        'sharpe': strat.analyzers.sharpe.get_analysis(),
+        'drawdown': strat.analyzers.drawdown.get_analysis()
+    }
+    # Convert tracked entries/exits to DataFrames
+    df_entries = pd.DataFrame(strat.entries, columns=['datetime', 'symbol', 'price', 'type'])
+    df_exits = pd.DataFrame(strat.exits, columns=['datetime', 'symbol', 'price', 'type'])
+    df_portfolio = pd.DataFrame(strat.portfolio_values)
+    
+    df_metrics = calculate_metrics(df_entries, df_exits, portfolio_metrics)
+    portfolio_metrics = calculate_portfolio_metrics(df_entries, df_exits, portfolio_metrics)
+    # Compute per-asset trade summary from tracked entries/exits
+    # summary = []
+    # for symbol in df_entries['symbol'].unique():
+    #     entries = df_entries[df_entries['symbol'] == symbol]
+    #     exits = df_exits[df_exits['symbol'] == symbol]
+    #     total_trades = min(len(entries), len(exits))
+    #     # Simple PnL per asset
+    #     profit = (exits['price'].values[:total_trades] - entries['price'].values[:total_trades])
+    #     summary.append({
+    #         'symbol': symbol,
+    #         'total_trades': total_trades,
+    #         'won': sum(profit > 0),
+    #         'lost': sum(profit < 0),
+    #         'avg_profit': profit.mean() if len(profit) > 0 else 0
+    #     })
+    # df_summary = pd.DataFrame(summary)
+
+    return strat, df_portfolio, df_metrics, portfolio_metrics
+
+
+    # --- Per-asset trade summary ---
+    # summary = []
+    # for d in cerebro.datas:
+    #     trades = strat.analyzers.__getattr__(f"trades_{d._name}").get_analysis()
+    #     summary.append({
+    #         'symbol': d._name,
+    #         'total_trades': trades.total.closed if 'total' in trades else 0,
+    #         'won': trades.won.total if 'won' in trades else 0,
+    #         'lost': trades.lost.total if 'lost' in trades else 0,
+    #     })
+    # df_summary = pd.DataFrame(summary)
+
+    # df_portfolio = pd.DataFrame(strat.portfolio_values)
+
+    # return strat, df_portfolio, portfolio_metrics
+
 
 def get_detailed_metrics(strat):
     trades = strat.analyzers.trades.get_analysis()
@@ -255,6 +484,159 @@ def get_detailed_metrics(strat):
 
     df_portfolio = pd.DataFrame(strat.portfolio_values)
     return metrics, df_portfolio
+
+
+def calculate_portfolio_metrics(df_entries, df_exits, portfolio_metrics):
+    """
+    Calculate portfolio-wide metrics from multi-asset entries/exits and analyzers.
+    """
+    import numpy as np
+
+    def safe_get(d, *keys, default=0):
+        for key in keys:
+            if d is None or key not in d:
+                return default
+            d = d[key]
+        return d
+
+    # Ensure entries/exits are sorted by datetime
+    df_entries = df_entries.sort_values('datetime')
+    df_exits = df_exits.sort_values('datetime')
+    total_trades = min(len(df_entries), len(df_exits))
+    if total_trades == 0:
+        return {}
+
+    # Calculate PnL per trade
+    pnl = df_exits['price'].values[:total_trades] - df_entries['price'].values[:total_trades]
+    won_trades = sum(pnl > 0)
+    lost_trades = sum(pnl < 0)
+    win_rate = won_trades / total_trades * 100
+    loss_rate = lost_trades / total_trades * 100
+    avg_win = pnl[pnl > 0].mean() if won_trades > 0 else 0
+    avg_loss = pnl[pnl < 0].mean() if lost_trades > 0 else 0
+    max_win = pnl[pnl > 0].max() if won_trades > 0 else 0
+    max_loss = pnl[pnl < 0].min() if lost_trades > 0 else 0
+    total_pnl = pnl.sum()
+    profit_factor = (avg_win * won_trades) / abs(avg_loss * lost_trades) if lost_trades > 0 else float('inf')
+    expectancy_per_trade = (win_rate/100)*avg_win - (loss_rate/100)*abs(avg_loss)
+
+    # Portfolio-wide metrics
+    sharpe = portfolio_metrics.get('sharpe', {})
+    drawdown = portfolio_metrics.get('drawdown', {})
+    returns = portfolio_metrics.get('returns', {})
+
+    sharpe_ratio = safe_get(sharpe, 'sharperatio', default=0)
+    max_drawdown = safe_get(drawdown, 'max', 'drawdown', default=0)
+    max_drawdown_duration_bars = safe_get(drawdown, 'max', 'len', default=0)
+    cumulative_return = safe_get(returns, 'rtot', default=0) * 100
+    average_return = safe_get(returns, 'ravg', default=0) * 100
+    volatility = safe_get(returns, 'rstd', default=0) * 100
+    calmar_ratio = average_return / max_drawdown if max_drawdown else 0
+
+    metrics = {
+        'Total Trades': total_trades,
+        'Winning Trades': won_trades,
+        'Losing Trades': lost_trades,
+        'Win Rate %': win_rate,
+        'Loss Rate %': loss_rate,
+        'Avg Win': avg_win,
+        'Avg Loss': avg_loss,
+        'Max Win': max_win,
+        'Max Loss': max_loss,
+        'Total Pnl': total_pnl,
+        'Sharpe Ratio': sharpe_ratio,
+        'Max Drawdown %': max_drawdown,
+        'Max Drawdown Duration Bars': max_drawdown_duration_bars,
+        'Cumulative Return %': cumulative_return,
+        'Average Return %': average_return,
+        'Volatility %': volatility,
+        'Calmar Ratio': calmar_ratio,
+        'Profit Factor': profit_factor,
+        'Expectancy Per Trade': expectancy_per_trade
+    }
+
+    return metrics
+
+
+def calculate_metrics(df_entries, df_exits, portfolio_metrics):
+    """
+    Calculate detailed metrics per asset.
+    df_entries/exits must have columns: ['datetime', 'symbol', 'price', 'type']
+    portfolio_metrics is a dict with 'sharpe', 'drawdown', 'returns'
+    """
+    results = []
+
+    # Helpers
+    def safe_get(d, *keys, default=0):
+        for key in keys:
+            if d is None or key not in d:
+                return default
+            d = d[key]
+        return d
+
+    # Extract portfolio-wide analyzers
+    sharpe = portfolio_metrics.get('sharpe', {})
+    drawdown = portfolio_metrics.get('drawdown', {})
+    returns = portfolio_metrics.get('returns', {})
+
+    # Loop over assets
+    for symbol in df_entries['symbol'].unique():
+        entries = df_entries[df_entries['symbol'] == symbol].sort_values('datetime')
+        exits = df_exits[df_exits['symbol'] == symbol].sort_values('datetime')
+        total_trades = min(len(entries), len(exits))
+        if total_trades == 0:
+            # No trades, skip
+            continue
+
+        # Calculate PnL per trade
+        pnl = exits['price'].values[:total_trades] - entries['price'].values[:total_trades]
+        won_trades = sum(pnl > 0)
+        lost_trades = sum(pnl < 0)
+        win_rate = won_trades / total_trades * 100
+        loss_rate = lost_trades / total_trades * 100
+        avg_win = pnl[pnl > 0].mean() if won_trades > 0 else 0
+        avg_loss = pnl[pnl < 0].mean() if lost_trades > 0 else 0
+        max_win = pnl[pnl > 0].max() if won_trades > 0 else 0
+        max_loss = pnl[pnl < 0].min() if lost_trades > 0 else 0
+        total_pnl = pnl.sum()
+        profit_factor = (avg_win * won_trades) / abs(avg_loss * lost_trades) if lost_trades > 0 else float('inf')
+        expectancy_per_trade = (win_rate/100)*avg_win - (loss_rate/100)*abs(avg_loss)
+
+        # Portfolio-wide metrics (Sharpe, Drawdown, Returns)
+        sharpe_ratio = safe_get(sharpe, 'sharperatio', default=0)
+        max_drawdown = safe_get(drawdown, 'max', 'drawdown', default=0)
+        max_drawdown_duration_bars = safe_get(drawdown, 'max', 'len', default=0)
+        cumulative_return = safe_get(returns, 'rtot', default=0) * 100
+        average_return = safe_get(returns, 'ravg', default=0) * 100
+        volatility = safe_get(returns, 'rstd', default=0) * 100
+        calmar_ratio = average_return / max_drawdown if max_drawdown else 0
+
+        # Compile metrics dict
+        metrics = {
+        'Symbol': symbol,
+        'Total Trades': total_trades,
+        'Winning Trades': won_trades,
+        'Losing Trades': lost_trades,
+        'Win Rate %': win_rate,
+        'Loss Rate %': loss_rate,
+        'Avg Win': avg_win,
+        'Avg Loss': avg_loss,
+        'Max Win': max_win,
+        'Max Loss': max_loss,
+        'Total Pnl': total_pnl,
+        'Sharpe Ratio': sharpe_ratio,
+        'Max Drawdown %': max_drawdown,
+        'Max Drawdown Duration Bars': max_drawdown_duration_bars,
+        'Cumulative Return %': cumulative_return,
+        'Average Return %': average_return,
+        'Volatility %': volatility,
+        'Calmar Ratio': calmar_ratio,
+        'Profit Factor': profit_factor,
+        'Expectancy Per Trade': expectancy_per_trade
+    }
+        results.append(metrics)
+
+    return pd.DataFrame(results)
 
 
 def safe_get(d, *keys, default=0):

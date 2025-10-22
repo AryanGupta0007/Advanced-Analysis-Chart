@@ -29,7 +29,8 @@ strategy_rules = {
 }
 
 def set_defaults():
-    st.session_state.setdefault('operator_config', [])
+    st.session_state.setdefault('strategy_type', 'Single Asset')
+    st.session_state.setdefault('custom_cols_config', [])
     st.session_state.setdefault("data_store", {})    
     st.session_state.setdefault("strats", {})
     st.session_state.setdefault("chart_period", "1d")
@@ -102,6 +103,7 @@ def set_defaults():
         st.session_state.setdefault(f"rhs_num_{i}",  3)  
         st.session_state.setdefault(f'rhs_{i}',  "close")         
         st.session_state.setdefault(f"conn_{i}",  "AND")
+        st.session_state.setdefault(f"rhs_kind_input_{i}",  "Indicator")
     st.session_state.setdefault("cond_specs", [])
     
     
@@ -274,6 +276,126 @@ def evaluate_conditions(data, computed_cols, cond_specs, connectors):
             final_mask = final_mask | masks[idx + 1]
     return final_mask
 
+# def plot_charts_indicators_and_cols(data, chart_interval, indicator_configs, final_mask, **kwargs):
+#     oscillator_cfgs = [cfg for cfg in indicator_configs if cfg["type"] in oscillator_set]
+#     rows = 1 + len(oscillator_cfgs)
+#     if rows == 1:
+#         row_heights = [1.0]
+#     else:
+#         row_heights = [0.62] + [0.38 / len(oscillator_cfgs)] * len(oscillator_cfgs)
+
+#     subplot_titles = [f"Price ({chart_interval})"] + [
+#         f"{cfg['type']}_{cfg.get('period')} ({cfg.get('timeframe')})" for cfg in oscillator_cfgs
+#     ]
+
+#     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=row_heights, subplot_titles=subplot_titles)
+
+#     # custom_cols_config = kwargs.get('custom_cols_config', None)
+#     # if custom_cols_config:
+#     #     for config in custom_cols_config:
+#     #         col_base = config.get('name')
+#     #         fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.5)), row=1, col=1)
+
+            
+             
+
+
+#     # Price (row 1)
+#     fig.add_trace(go.Candlestick(x=data.index, open=data["open"], high=data["high"], low=data["low"], close=data["close"], name="Price"), row=1, col=1)
+
+#     # Overlay non-oscillator indicators on price
+#     for cfg in st.session_state.indicator_configs:
+#         ind = cfg["type"]
+#         period = cfg.get("period")
+#         tf = cfg.get("timeframe")
+#         ref_val = cfg.get("ref_val", "close")
+#         col_base = f"{ind}_{period}_{tf}" if period is not None else f"{ind}_{tf}"
+#         if ind in moving_averages:
+#             col_base = f"{ind}_{ref_val}_{period}_{tf}"
+#         if ind in oscillator_set:
+#             continue  # oscillator placed separately
+#         color = cfg.get("color")
+            
+#         # main line
+#         if col_base in data.columns:
+#             fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.5, color=color)), row=1, col=1)
+
+#         # BBANDS parts
+#         for part_suffix, dash in [("_upper","dot"), ("_middle","dash"), ("_lower","dot")]:
+#             bbcol = f"{col_base}{part_suffix}"
+#             if bbcol in data.columns:
+#                 if part_suffix == "_upper":
+#                     fig.add_trace(go.Scatter(x=data.index, y=data[bbcol], name=bbcol, line=dict(width=1, dash=dash, color=cfg["bb_params"]["color_up"])), row=1, col=1)
+#                 if part_suffix == "_middle":
+#                     fig.add_trace(go.Scatter(x=data.index, y=data[bbcol], name=bbcol, line=dict(width=1, dash=dash, color=cfg["bb_params"]["color_ma"])), row=1, col=1)
+#                 if part_suffix == "_lower":
+#                     fig.add_trace(go.Scatter(x=data.index, y=data[bbcol], name=bbcol, line=dict(width=1, dash=dash, color=cfg["bb_params"]["color_down"])), row=1, col=1)
+                
+#         # MACD histogram (if user added macd but we put MACD as oscillator; keep overlays minimal)
+
+#     # Highlight final_mask on price only
+#     if final_mask is not None and final_mask.any():
+#         fig.add_trace(go.Scatter(x=data.index[final_mask], y=data["close"][final_mask], mode="markers",
+#                                 marker=dict(size=9, color="magenta", symbol="circle"), name="Condition Met"), row=1, col=1)
+
+#     # Add oscillator subplots
+#     for idx, cfg in enumerate(oscillator_cfgs):
+#         row_num = idx + 2
+#         ind = cfg["type"]
+#         period = cfg.get("period")
+#         tf = cfg.get("timeframe")
+#         col_base = f"{ind}_{period}_{tf}" if period is not None else f"{ind}_{tf}"
+#         color = cfg.get("color")
+        
+#         if ind == "MACD":
+#             # line, signal, hist
+#             if col_base in data.columns:
+#                 fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.2, color=cfg["macd_params"]["color_line"])), row=row_num, col=1)
+#             sig = f"{col_base}_signal"
+#             hist = f"{col_base}_hist"
+#             if sig in data.columns:
+#                 fig.add_trace(go.Scatter(x=data.index, y=data[sig], name=sig, line=dict(width=1, color=cfg["macd_params"]["color_signal"])), row=row_num, col=1)
+#             if hist in data.columns:
+#                 fig.add_trace(go.Bar(x=data.index, y=data[hist], name=hist, marker=dict(color=cfg["macd_params"]["color_hist"])), row=row_num, col=1)
+
+#         elif ind == "STOCH":
+#             kcol = f"{col_base}_k"
+#             dcol = f"{col_base}_d"
+#             if kcol in data.columns:
+#                 fig.add_trace(go.Scatter(x=data.index, y=data[kcol], name=kcol, line=dict(width=1.2)), row=row_num, col=1)
+#             if dcol in data.columns:
+#                 fig.add_trace(go.Scatter(x=data.index, y=data[dcol], name=dcol, line=dict(width=1, color="red")), row=row_num, col=1)
+
+#         else:
+#             # single-line oscillators
+#             if col_base in data.columns:
+#                 fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.2, color=color)), row=row_num, col=1)
+        
+#         if final_mask is not None and final_mask.any():
+#             if ind == "MACD" and col_base in data.columns:
+#                 fig.add_trace(go.Scatter(
+#                     x=data.index[final_mask], y=data[col_base][final_mask],
+#                     mode="markers", marker=dict(size=7, color="magenta", symbol="circle"),
+#                     name=f"Condition ({ind})"
+#                 ), row=row_num, col=1)
+#             elif ind == "STOCH" and f"{col_base}_k" in data.columns:
+#                 fig.add_trace(go.Scatter(
+#                     x=data.index[final_mask], y=data[f"{col_base}_k"][final_mask],
+#                     mode="markers", marker=dict(size=7, color="magenta", symbol="circle"),
+#                     name=f"Condition ({ind})"
+#                 ), row=row_num, col=1)
+#             elif col_base in data.columns:
+#                 fig.add_trace(go.Scatter(
+#                     x=data.index[final_mask], y=data[col_base][final_mask],
+#                     mode="markers", marker=dict(size=7, color="magenta", symbol="circle"),
+#                     name=f"Condition ({ind})"
+#                 ), row=row_num, col=1)
+
+#     # finalize layout
+#     fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False,
+#                     title=f"{kwargs.get('symbol')}  •  {kwargs.get('period_str')}  •  Base interval: {kwargs.get('interval_label')}",
+#                     height=900, width=1400)
+#     return fig
 def plot_charts_indicators_and_cols(data, chart_interval, indicator_configs, final_mask, **kwargs):
     oscillator_cfgs = [cfg for cfg in indicator_configs if cfg["type"] in oscillator_set]
     rows = 1 + len(oscillator_cfgs)
@@ -286,22 +408,19 @@ def plot_charts_indicators_and_cols(data, chart_interval, indicator_configs, fin
         f"{cfg['type']}_{cfg.get('period')} ({cfg.get('timeframe')})" for cfg in oscillator_cfgs
     ]
 
-    fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=row_heights, subplot_titles=subplot_titles)
+    fig = make_subplots(
+        rows=rows, cols=1, shared_xaxes=True,
+        vertical_spacing=0.04, row_heights=row_heights,
+        subplot_titles=subplot_titles
+    )
 
-    # custom_cols_config = kwargs.get('custom_cols_config', None)
-    # if custom_cols_config:
-    #     for config in custom_cols_config:
-    #         col_base = config.get('name')
-    #         fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.5)), row=1, col=1)
+    # ---------- PRICE CHART ----------
+    fig.add_trace(go.Candlestick(
+        x=data.index, open=data["open"], high=data["high"],
+        low=data["low"], close=data["close"], name="Price"
+    ), row=1, col=1)
 
-            
-             
-
-
-    # Price (row 1)
-    fig.add_trace(go.Candlestick(x=data.index, open=data["open"], high=data["high"], low=data["low"], close=data["close"], name="Price"), row=1, col=1)
-
-    # Overlay non-oscillator indicators on price
+    # ---------- OVERLAY NON-OSCILLATOR INDICATORS ----------
     for cfg in st.session_state.indicator_configs:
         ind = cfg["type"]
         period = cfg.get("period")
@@ -313,30 +432,37 @@ def plot_charts_indicators_and_cols(data, chart_interval, indicator_configs, fin
         if ind in oscillator_set:
             continue  # oscillator placed separately
         color = cfg.get("color")
-            
-        # main line
-        if col_base in data.columns:
-            fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.5, color=color)), row=1, col=1)
 
-        # BBANDS parts
+        if col_base in data.columns:
+            fig.add_trace(go.Scatter(
+                x=data.index, y=data[col_base], name=col_base,
+                line=dict(width=1.5, color=color)
+            ), row=1, col=1)
+
+        # Bollinger Bands
         for part_suffix, dash in [("_upper","dot"), ("_middle","dash"), ("_lower","dot")]:
             bbcol = f"{col_base}{part_suffix}"
             if bbcol in data.columns:
-                if part_suffix == "_upper":
-                    fig.add_trace(go.Scatter(x=data.index, y=data[bbcol], name=bbcol, line=dict(width=1, dash=dash, color=cfg["bb_params"]["color_up"])), row=1, col=1)
-                if part_suffix == "_middle":
-                    fig.add_trace(go.Scatter(x=data.index, y=data[bbcol], name=bbcol, line=dict(width=1, dash=dash, color=cfg["bb_params"]["color_ma"])), row=1, col=1)
-                if part_suffix == "_lower":
-                    fig.add_trace(go.Scatter(x=data.index, y=data[bbcol], name=bbcol, line=dict(width=1, dash=dash, color=cfg["bb_params"]["color_down"])), row=1, col=1)
-                
-        # MACD histogram (if user added macd but we put MACD as oscillator; keep overlays minimal)
+                bb_color = cfg["bb_params"].get(
+                    "color_up" if part_suffix == "_upper"
+                    else "color_down" if part_suffix == "_lower"
+                    else "color_ma"
+                )
+                fig.add_trace(go.Scatter(
+                    x=data.index, y=data[bbcol], name=bbcol,
+                    line=dict(width=1, dash=dash, color=bb_color)
+                ), row=1, col=1)
 
-    # Highlight final_mask on price only
+    # ---------- HIGHLIGHT FINAL MASK ON PRICE ----------
     if final_mask is not None and final_mask.any():
-        fig.add_trace(go.Scatter(x=data.index[final_mask], y=data["close"][final_mask], mode="markers",
-                                marker=dict(size=9, color="magenta", symbol="circle"), name="Condition Met"), row=1, col=1)
+        fig.add_trace(go.Scatter(
+            x=data.index[final_mask], y=data["close"][final_mask],
+            mode="markers",
+            marker=dict(size=9, color="magenta", symbol="circle", line=dict(width=1, color="white")),
+            name="Condition Met"
+        ), row=1, col=1)
 
-    # Add oscillator subplots
+    # ---------- OSCILLATOR SUBPLOTS ----------
     for idx, cfg in enumerate(oscillator_cfgs):
         row_num = idx + 2
         ind = cfg["type"]
@@ -344,35 +470,90 @@ def plot_charts_indicators_and_cols(data, chart_interval, indicator_configs, fin
         tf = cfg.get("timeframe")
         col_base = f"{ind}_{period}_{tf}" if period is not None else f"{ind}_{tf}"
         color = cfg.get("color")
+
         if ind == "MACD":
-            # line, signal, hist
             if col_base in data.columns:
-                fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.2, color=cfg["macd_params"]["color_line"])), row=row_num, col=1)
+                fig.add_trace(go.Scatter(
+                    x=data.index, y=data[col_base], name=col_base,
+                    line=dict(width=1.2, color=cfg["macd_params"]["color_line"])
+                ), row=row_num, col=1)
             sig = f"{col_base}_signal"
             hist = f"{col_base}_hist"
             if sig in data.columns:
-                fig.add_trace(go.Scatter(x=data.index, y=data[sig], name=sig, line=dict(width=1, color=cfg["macd_params"]["color_signal"])), row=row_num, col=1)
+                fig.add_trace(go.Scatter(
+                    x=data.index, y=data[sig], name=sig,
+                    line=dict(width=1, color=cfg["macd_params"]["color_signal"])
+                ), row=row_num, col=1)
             if hist in data.columns:
-                fig.add_trace(go.Bar(x=data.index, y=data[hist], name=hist, marker=dict(color=cfg["macd_params"]["color_hist"])), row=row_num, col=1)
+                fig.add_trace(go.Bar(
+                    x=data.index, y=data[hist], name=hist,
+                    marker=dict(color=cfg["macd_params"]["color_hist"])
+                ), row=row_num, col=1)
 
         elif ind == "STOCH":
             kcol = f"{col_base}_k"
             dcol = f"{col_base}_d"
             if kcol in data.columns:
-                fig.add_trace(go.Scatter(x=data.index, y=data[kcol], name=kcol, line=dict(width=1.2)), row=row_num, col=1)
+                fig.add_trace(go.Scatter(
+                    x=data.index, y=data[kcol], name=kcol, line=dict(width=1.2)
+                ), row=row_num, col=1)
             if dcol in data.columns:
-                fig.add_trace(go.Scatter(x=data.index, y=data[dcol], name=dcol, line=dict(width=1, color="red")), row=row_num, col=1)
+                fig.add_trace(go.Scatter(
+                    x=data.index, y=data[dcol], name=dcol, line=dict(width=1, color="red")
+                ), row=row_num, col=1)
 
         else:
-            # single-line oscillators
             if col_base in data.columns:
-                fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.2, color=color)), row=row_num, col=1)
+                fig.add_trace(go.Scatter(
+                    x=data.index, y=data[col_base], name=col_base,
+                    line=dict(width=1.2, color=color)
+                ), row=row_num, col=1)
 
-    # finalize layout
-    fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False,
-                    title=f"{kwargs.get('symbol')}  •  {kwargs.get('period_str')}  •  Base interval: {kwargs.get('interval_label')}",
-                    height=900, width=1400)
+        # 🔹 ADD CONDITION MARKERS ON OSCILLATORS
+        if final_mask is not None and final_mask.any():
+            if ind == "MACD" and col_base in data.columns:
+                fig.add_trace(go.Scatter(
+                    x=data.index[final_mask], y=data[col_base][final_mask],
+                    mode="markers",
+                    marker=dict(size=7, color="magenta", symbol="circle", line=dict(width=1, color="white")),
+                    name=f"Condition ({ind})", showlegend=False
+                ), row=row_num, col=1)
+            elif ind == "STOCH" and f"{col_base}_k" in data.columns:
+                fig.add_trace(go.Scatter(
+                    x=data.index[final_mask], y=data[f"{col_base}_k"][final_mask],
+                    mode="markers",
+                    marker=dict(size=7, color="magenta", symbol="circle", line=dict(width=1, color="white")),
+                    name=f"Condition ({ind})", showlegend=False
+                ), row=row_num, col=1)
+            elif col_base in data.columns:
+                fig.add_trace(go.Scatter(
+                    x=data.index[final_mask], y=data[col_base][final_mask],
+                    mode="markers",
+                    marker=dict(size=7, color="magenta", symbol="circle", line=dict(width=1, color="white")),
+                    name=f"Condition ({ind})", showlegend=False
+                ), row=row_num, col=1)
+
+    # ---------- ADD VERTICAL LINES ACROSS ALL SUBPLOTS ----------
+    if final_mask is not None and final_mask.any():
+        for xval in data.index[final_mask]:
+            fig.add_vline(
+                x=pd.to_datetime(xval),
+                line=dict(color="magenta", width=1, dash="dot"),
+                opacity=0.6,
+                layer="below"
+            )
+
+    # ---------- FINAL LAYOUT ----------
+    fig.update_layout(
+        template="plotly_dark",
+        xaxis_rangeslider_visible=False,
+        title=f"{kwargs.get('symbol')}  •  {kwargs.get('period_str')}  •  Base interval: {kwargs.get('interval_label')}",
+        height=900,
+        width=1400
+    )
+
     return fig
+
 
 def load_file(uploaded_file):
     file_data = json.load(uploaded_file)
@@ -515,7 +696,7 @@ def plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_
         f"{cfg['type']}_{cfg.get('period')} ({cfg.get('timeframe')})" for cfg in oscillator_cfgs
     ]
 
-    fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=row_heights, subplot_titles=subplot_titles)
+    fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, vertical_spacing=0.3, row_heights=row_heights, subplot_titles=subplot_titles)
 
     # custom_cols_config = kwargs.get('custom_cols_config', None)
     # if custom_cols_config:
@@ -593,12 +774,44 @@ def plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_
             if col_base in data.columns:
                 fig.add_trace(go.Scatter(x=data.index, y=data[col_base], name=col_base, line=dict(width=1.2, color=color)), row=row_num, col=1)
 
-    
+    # 🔹 ADD CONDITION MARKERS ON OSCILLATORS
+        if final_mask is not None and final_mask.any():
+            if ind == "MACD" and col_base in data.columns:
+                fig.add_trace(go.Scatter(
+                    x=data.index[final_mask], y=data[col_base][final_mask],
+                    mode="markers",
+                    marker=dict(size=7, color="magenta", symbol="circle", line=dict(width=1, color="white")),
+                    name=f"Condition ({ind})", showlegend=False
+                ), row=row_num, col=1)
+            elif ind == "STOCH" and f"{col_base}_k" in data.columns:
+                fig.add_trace(go.Scatter(
+                    x=data.index[final_mask], y=data[f"{col_base}_k"][final_mask],
+                    mode="markers",
+                    marker=dict(size=7, color="magenta", symbol="circle", line=dict(width=1, color="white")),
+                    name=f"Condition ({ind})", showlegend=False
+                ), row=row_num, col=1)
+            elif col_base in data.columns:
+                fig.add_trace(go.Scatter(
+                    x=data.index[final_mask], y=data[col_base][final_mask],
+                    mode="markers",
+                    marker=dict(size=7, color="magenta", symbol="circle", line=dict(width=1, color="white")),
+                    name=f"Condition ({ind})", showlegend=False
+                ), row=row_num, col=1)
+
+
     # --- Entries ---
     if entries:
-        entry_times = [pd.to_datetime(t) for t, _, _ in entries]
-        entry_prices = [p for _, p, _ in entries]
-        entry_labels = [lbl for _, _, lbl in entries]
+        if kwargs.get('strategy_type') == 'Single Asset':
+            entry_times = [pd.to_datetime(t) for t, _,  _ in entries]
+            entry_prices = [p for _,  p, _ in entries]
+            entry_labels = [lbl for _,  _, lbl in entries]
+        else:    
+            entry_times = [pd.to_datetime(t) for t, sym,  _, _ in entries if sym == kwargs.get('symbol')]
+            # sym = [sym for _, sym, _, _ in entries]
+            entry_prices = [p for _, sym, p, _ in entries if sym == kwargs.get('symbol')]
+            entry_labels = [lbl for _, sym, _, lbl in entries if sym == kwargs.get('symbol')]
+            
+        print('entry labels', entry_labels)    
         entry_colors = ['blue' if lbl=='LONG' else 'purple' for lbl in entry_labels]
 
         # 1) Marker only (always visible)
@@ -619,33 +832,41 @@ def plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_
 
     # --- Exits ---
     if exits:
-        exit_times = [pd.to_datetime(t) for t, _, _ in exits]
-        exit_prices = [p for _, p, _ in exits]
-        exit_labels = [lbl for _, _, lbl in exits]
+        if kwargs.get('strategy_type') == 'Single Asset':
+            exit_times = [pd.to_datetime(t) for t,  _, _ in exits]
+            exit_prices = [p for _, p, _ in exits]
+            exit_labels = [lbl for _, _, lbl in exits]
+        else:    
+            exit_times = [pd.to_datetime(t) for t, sym,  _, _ in exits if sym == kwargs.get('symbol')]
+            exit_prices = [p for _, sym, p, _ in exits if sym == kwargs.get('symbol')]
+            # symbol = [sym for _, sym, _, _ in exits]
+            exit_labels = [lbl for _, sym, _, lbl in exits if sym == kwargs.get('symbol')]
+        
         exit_colors = ['orange' if lbl=='LONG' else 'red' for lbl in exit_labels]
 
-        # 1) Marker only
-        fig.add_trace(go.Scatter(
-            x=exit_times, y=exit_prices, mode='markers',
-            marker=dict(symbol='triangle-down', size=10, color=exit_colors),
-            name='Exit Marker'
-        ), row=1, col=1)
 
-        # 2) Marker + text (hidden initially)
-        fig.add_trace(go.Scatter(
-            x=exit_times, y=exit_prices, mode='markers+text',
-            marker=dict(symbol='triangle-down', size=10, color=exit_colors),
-            text=exit_labels, textposition='bottom center',
-            hoverinfo='text', visible=False,
-            name='Exit Label'
-        ), row=1, col=1)
+    # 1) Marker only
+    fig.add_trace(go.Scatter(
+        x=exit_times, y=exit_prices, mode='markers',
+        marker=dict(symbol='triangle-down', size=10, color=exit_colors),
+        name='Exit Marker'
+    ), row=1, col=1)
+
+    # 2) Marker + text (hidden initially)
+    fig.add_trace(go.Scatter(
+        x=exit_times, y=exit_prices, mode='markers+text',
+        marker=dict(symbol='triangle-down', size=10, color=exit_colors),
+        text=exit_labels, textposition='bottom center',
+        hoverinfo='text', visible=False,
+        name='Exit Label'
+    ), row=1, col=1)
 
     # --- Buttons to toggle labels ---
     
     # finalize layout
     fig.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False,
                     title=f"{kwargs.get('symbol')}  •  {kwargs.get('period_str')}  •  Base interval: {kwargs.get('interval_label')}",
-                    height=900, width=1400)
+                    height=300, width=500)
     return fig
 
 

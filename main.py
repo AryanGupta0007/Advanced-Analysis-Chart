@@ -240,7 +240,7 @@ def perform_operation(data, name, lhs, operator, operation_kind, rhs, **kwargs):
     print("237", data[name].head())
     return data 
             
-with st.expander("## Create a custom column"):
+with st.expander("## Create a custom column", expanded=True):
     # available_cols_cond = st.session_state.get("computed_cols", list(data.columns))
     num_operations = st.number_input("Enter the number of operands for the operation", value=st.session_state.get('num_operations'), key='num_operations')
     rhs_kind_options = ['Number', 'Column']
@@ -248,30 +248,42 @@ with st.expander("## Create a custom column"):
     operators_options = ['+', '-', '*', '/']
     mathematical_operations_options = ['mean', 'std']
     operator_config = st.session_state.get('custom_cols_config', [])
-     
+    new_custom_cols_config = [] 
     
     for i in range(st.session_state.get('num_operations', 0)):
+        st.markdown(f"## Custom Column: {i+1}")
         row_key = f'custom_col_{i}'
-        a, b, c, d, e, f = st.columns([5, 3, 5, 5, 5,2])
-        col_name = a.text_input("Enter a unique custom column name ", value=st.session_state.get(f'name_{row_key}', "unique column name"), key=f'name_{row_key}')
+        row1 = st.columns(3)
+        
+        # a, b, c, d, e, f = st.columns([5, 3, 5, 5, 5,2])
+        with row1[0]:
+            col_name = st.text_input("Enter a unique custom column name ", value=st.session_state.get(f'name_{row_key}', "unique column name"), key=f'name_{row_key}')
         lhs_val = st.session_state.get(f'lhs_{row_key}', available_cols_cond[0])
-        lhs = b.selectbox(f'LHS {i+1}', options=st.session_state['computed_cols'], index=st.session_state['computed_cols'].index(lhs_val), key=f'lhs_{row_key}') 
-        operation_kind = c.selectbox(f'Operator kind {i+1}', options=operation_kind_options, key=f'operation_kind_{row_key}', index=operation_kind_options.index(st.session_state.get(f'operation_kind_{row_key}', operation_kind_options[0]))) 
+        with row1[1]:
+            lhs = st.selectbox(f'LHS {i+1}', options=st.session_state['computed_cols'], index=st.session_state['computed_cols'].index(lhs_val), key=f'lhs_{row_key}') 
+        with row1[2]:
+            operation_kind = st.selectbox(f'Operator kind {i+1}', options=operation_kind_options, key=f'operation_kind_{row_key}', index=operation_kind_options.index(st.session_state.get(f'operation_kind_{row_key}', operation_kind_options[0]))) 
         rhs_kind = None
         operator = None
+        row2 = st.columns(3)
         if operation_kind == 'Arithematic':
-            operator = d.selectbox(f'Select Operator {i+1}', options=operators_options, index=operators_options.index(st.session_state.get(f'operation_{row_key}', operators_options[0])), key=f'operation_{row_key}')    
-            rhs_kind = e.selectbox(f'Select kind of RHS {i+1}', options=rhs_kind_options, index=rhs_kind_options.index(st.session_state.get(f'rhs_kind_{row_key}', rhs_kind_options[0])), key=f'rhs_kind_{row_key}')
+            with row2[0]:
+                operator = st.selectbox(f'Select Operator {i+1}', options=operators_options, index=operators_options.index(st.session_state.get(f'operation_{row_key}', operators_options[0])), key=f'operation_{row_key}')    
+            with row2[1]:
+                rhs_kind = st.selectbox(f'Select kind of RHS {i+1}', options=rhs_kind_options, index=rhs_kind_options.index(st.session_state.get(f'rhs_kind_{row_key}', rhs_kind_options[0])), key=f'rhs_kind_{row_key}')
             
             if rhs_kind == 'Number':
-                rhs_val = f.number_input('Enter the value', key=f'rhs_num_{row_key}', value=st.session_state.get(f'rhs_num_{row_key}', 0))
+                with row2[2]:
+                    rhs_val = st.number_input('Enter the value', key=f'rhs_num_{row_key}', value=st.session_state.get(f'rhs_num_{row_key}', 0))
     
             elif rhs_kind == 'Column':
-                rhs_val = f.selectbox('Select the column', options=st.session_state['computed_cols'], key=f'rhs_col_{row_key}', index=st.session_state['computed_cols'].index(st.session_state.get(f'rhs_col_{row_key}', available_cols_cond[0])))
+                with row2[2]:
+                    rhs_val = st.selectbox('Select the column', options=st.session_state['computed_cols'], key=f'rhs_col_{row_key}', index=st.session_state['computed_cols'].index(st.session_state.get(f'rhs_col_{row_key}', available_cols_cond[0])))
             # data = perform_operation(data, col_name, lhs_val, operator, "arithematic", rhs_val=rhs_val, rhs_kind=rhs_kind)        
             # print(data[col_name])
         elif operation_kind == 'Statistical':
-            rhs_val = d.selectbox(f'Select Operator {i+1}', options=mathematical_operations_options, index=mathematical_operations_options.index(st.session_state.get(f'mathematical_operation_{row_key}', mathematical_operations_options[0])), key=f'mathematical_operation_{row_key}') 
+            with row2[0]:
+                rhs_val = st.selectbox(f'Select Operator {i+1}', options=mathematical_operations_options, index=mathematical_operations_options.index(st.session_state.get(f'mathematical_operation_{row_key}', mathematical_operations_options[0])), key=f'mathematical_operation_{row_key}') 
             # data = perform_operation(data, col_name, lhs_val, operator, "mathematical")
         params = {
             'name': col_name, 
@@ -281,20 +293,12 @@ with st.expander("## Create a custom column"):
             'rhs_kind': rhs_kind,
             'operator_kind': operation_kind
         }
-        for i, config in enumerate(st.session_state.custom_cols_config):
-            name = config.get('name')
-            if name == col_name:
-                
-                config["lhs"] = lhs
-                config["rhs"] = rhs
-                config["rhs_kind"] = rhs_kind
-                config["operator_kind"] = operator_kind
-                
+        new_custom_cols_config.append(params)        
     operate_btn = st.button('operate')
 
     if operate_btn:
         print('equating', data.columns)
-        st.session_state['custom_cols_config'] = operator_config
+        st.session_state['custom_cols_config'] = new_custom_cols_config
 
 for config in st.session_state.get('custom_cols_config', []):
     data = perform_operation(
@@ -492,8 +496,9 @@ st.sidebar.download_button(
     file_name=f"{config_file_name}.json", 
     mime="application/json"
 )
+strategy_type_options = ['Single Asset', 'Multi Asset']
 
-
+strategy_type = st.selectbox("Select Strategy Type", options=strategy_type_options, key='strategy_type', index=strategy_type_options.index(st.session_state.get('strategy_type', strategy_type_options[0])))
 number_of_symbols = st.number_input("Number of Symbols", key="num_sym", value=st.session_state.get("num_sym", 0))
 
 for i in range(1, number_of_symbols+1):
@@ -517,11 +522,11 @@ for row in range(4):
 
 backtest_btn = st.button("Backtest Strategy")
 import matplotlib.pyplot as plt
-from my_backtester import backtest, DynamicStrategy, get_detailed_metrics, plot_strategy_metrics
+from my_backtester import backtest_single_asset, backtest_multiple_assets, DynamicStrategy, MultiAssetDynamicStrategy, get_detailed_metrics, plot_strategy_metrics
 
 
 def fetch_data_and_compute_indicators(symbol, chart_interval=st.session_state.chart_interval, days=days):
-    data_1m = fetch_historical(symbol, days=10)
+    data_1m = fetch_historical(symbol, days=2)
     unique_dates = np.unique(data_1m.index.date)
     last_trading_days = unique_dates[-days:]
     df = data_1m[np.isin(data_1m.index.date, last_trading_days)].copy()
@@ -537,77 +542,172 @@ def fetch_data_and_compute_indicators(symbol, chart_interval=st.session_state.ch
     # resample to chart interval for display
     data = resample_candles(df, chart_interval)
     all_cols, data = compute_indicators(data, indicator_config=st.session_state.indicator_configs, moving_averages=moving_averages, chart_interval=chart_interval, df=df)
-    print(st.session_state.get('custom_cols_config'))
-    for config in st.session_state.get('custom_col_config', []):
+    print('532', st.session_state.get('custom_cols_config'))
+    for config in st.session_state['custom_cols_config']:
         data = perform_operation(data, name=config['name'], lhs=config['lhs'], operator=config['operator'], rhs=config['rhs'], operation_kind=config['operator_kind'], rhs_kind=config['rhs_kind'])
-
+    print('535', list(data.columns))
     return data 
 
 
 if backtest_btn:
-    symbols_to_backtest = []
-    progress = st.progress(0, text="Running backtests...")
+    if st.session_state['strategy_type'] == strategy_type_options[0]:
+        
+        symbols_to_backtest = []
+        progress = st.progress(0, text="Running backtests...")
+        
+        for x in range(st.session_state.get("num_sym", 0)):
+            num = x + 1
+            symbol_to_fetch = st.session_state.get(f"symbol_{num}_key", "ADANIENT")
+            data = fetch_data_and_compute_indicators(symbol_to_fetch)
+            
+            # final_mask = evaluate_conditions(data, computed_cols=data.columns, cond_specs=cond_specs, connectors=connectors)
+            # print('547', data.columns)
+            st.session_state.data_store[symbol_to_fetch] = data
+            strat = backtest_single_asset(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=0.01 * float(brokerage) , slippage=0.01 * float(slippage))
+            st.session_state.strats[symbol_to_fetch] = strat
+            progress.progress((x + 1) / number_of_symbols)
+        print('448', st.session_state.strats)
+        progress.empty()
+        st.success("✅ Backtests completed successfully!")
+    else:
+        progress = st.progress(0, text="Running backtests...")
+        dfs = []
+        for x in range(st.session_state.get("num_sym", 0)):
+            num = x + 1
+            symbol_to_fetch = st.session_state.get(f"symbol_{num}_key", "ADANIENT")
+            data = fetch_data_and_compute_indicators(symbol_to_fetch)
+            dfs.append([data, symbol_to_fetch])
+            st.session_state.data_store[symbol_to_fetch] = data
+        progress.progress(0.5)
+        strat, df_portfolio, df_summary, portfolio_metrics = backtest_multiple_assets(dfs, MultiAssetDynamicStrategy, cash, data.columns, strategy_rules, commission=0.01 * float(brokerage) , slippage=0.01 * float(slippage))
+        st.session_state.strats['multi_assets'] = strat
+        progress.progress(1)
+        # print('448', st.session_state.strats)
+        progress.empty()
+        st.success("✅ Backtests completed successfully!")
+        
+        
+rows = st.session_state["num_sym"] // 3 
+num_rows = 1 if rows < 1 else rows  
+num_cols = 2
+metric_labels = ['Symbol']
+metrics_list = []
+for row in range(num_rows):
+    cols = st.columns(num_cols)
+    for col in range(num_cols):
+        i = row * num_cols + col
+        if (i+1 <= st.session_state["num_sym"]):
+            with cols[col]:
+
+                symbol = st.session_state[f"symbol_{i+1}_key"]
+                data = st.session_state.data_store[symbol]
+                final_mask = evaluate_conditions(data=data, computed_cols=st.session_state.computed_cols, cond_specs=st.session_state.cond_specs, connectors=st.session_state.connectors)
+                                
+                if st.session_state.get('strategy_type') == strategy_type_options[0]:
+                    strat = st.session_state.strats[symbol]
+                    
+                    metrics, portfolio_values = get_detailed_metrics(strat)
+                    metrics_keys = metrics.keys()
+                    
+                    if metric_labels == ['Symbol']:
+                        for m_key in metrics_keys:
+                            label = ''
+                            for current_label in m_key.split('_'):
+                                label += current_label.title() + ' '
+                            metric_labels.append(label.strip())
+                    # print(metric_labels)
+                    values = [symbol]
+                    for value in metrics.values():
+                        values.append(value)
+                    metrics_df = pd.DataFrame({'metric':metric_labels, 'value': values})
+                    print(metrics_df.head())
+                    s = metrics_df.set_index('metric').T
+                    metrics_list.append(s)
+                    # st.table(metrics_df)
+                    # figs = plot_strategy_metrics(metrics)
+                    # for fig in figs:
+                    #     st.pyplot(fig)
+                else:
+                    strat = st.session_state["strats"]["multi_assets"]
+                    # st.dataframe(df_summary)
+                       
+                entries = strat.entries 
+                exits = strat.exits
+                
+                # current_conds = strat.current_conditions 
+                # entry_dates, entry_prices = [entry[0] for entry in entries], [entry[1] for entry in entries] 
+                # cond_dates, cond_smas, cond_closes, cond_labels = [cond[0] for cond in current_conds], [cond[2] for cond in current_conds], [cond[1] for cond in current_conds], [cond[3] for cond in current_conds]
+                # entries_df = pd.DataFrame({
+                #     'dt': entry_dates, 'price': entry_prices 
+                # })
+                # cond_df = pd.DataFrame({
+                #     'dt': cond_dates, 'sma': cond_smas, 'close': cond_closes, 'label': cond_labels
+                # })
+                
+                fig = plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_configs, final_mask, entries, exits, symbol=symbol, period_str=period_str, interval_label=interval_label, custom_cols_config=st.session_state.get('custom_cols_config'), strategy_type=st.session_state['strategy_type']) 
+                st.plotly_chart(fig, use_container_width=True)
+
+if len(metrics_list) > 0:
+    metrics_df = pd.concat(metrics_list, ignore_index=True)
+    metrics_df = metrics_df.set_index('Symbol')
+    st.dataframe(metrics_df, width='stretch')            
+
+if st.session_state.strategy_type == strategy_type_options[1]:
+    # st.dataframe(df_portfolio)
+    # for label in portfolio_metrics.keys():
+    #     pass
     
-    for x in range(st.session_state.get("num_sym", 0)):
-        num = x + 1
-        symbol_to_fetch = st.session_state.get(f"symbol_{num}_key", "ADANIENT")
-        data = fetch_data_and_compute_indicators(symbol_to_fetch)
+    st.dataframe(portfolio_metrics)
+    df_summary = df_summary.set_index('Symbol') 
+    st.dataframe(df_summary)
+
+# for i in range(1, number_of_symbols, 4):
+#     cols = st.columns(4)
+#     for j, col in enumerate(cols):
+#         page_num = i + j
+#         if page_num <= number_of_symbols:
+#             label = st.session_state.get(f"symbol_{page_num}_key", "ADANIENT")
+#             if col.button(label, key=f"btn_{label}"):
+#                 st.session_state["current_page"] = label
+
+
+# if "current_page" in st.session_state:
+#     symbol = st.session_state.get("current_page")
+#     print('463', symbol)
+#     print('464', st.session_state.strats[symbol])
+#     strat = st.session_state.strats[symbol]
+#     data = st.session_state.data_store[symbol]
+#     metrics, portfolio_values = get_detailed_metrics(strat)
+#     metrics_df = pd.DataFrame({'metric':metrics.keys(), 'value': metrics.values()})
+#     # st.markdown(metrics_df)
+#     st.table(metrics_df)
+#     # figs = plot_strategy_metrics(metrics)
+#     # for fig in figs:
+#     #     st.pyplot(fig)
+#     entries = strat.entries 
+#     exits = strat.exits
+#     current_conds = strat.current_conditions 
+#     entry_dates, entry_prices = [entry[0] for entry in entries], [entry[1] for entry in entries] 
+#     cond_dates, cond_smas, cond_closes, cond_labels = [cond[0] for cond in current_conds], [cond[2] for cond in current_conds], [cond[1] for cond in current_conds], [cond[3] for cond in current_conds]
+#     entries_df = pd.DataFrame({
+#         'dt': entry_dates, 'price': entry_prices 
+#     })
+#     cond_df = pd.DataFrame({
+#         'dt': cond_dates, 'sma': cond_smas, 'close': cond_closes, 'label': cond_labels
+#     })
         
-        st.session_state.data_store[symbol_to_fetch] = data
-        strat = backtest(data, DynamicStrategy, cash, data.columns, strategy_rules, commission=0.01 * float(brokerage) , slippage=0.01 * float(slippage))
-        st.session_state.strats[symbol_to_fetch] = strat
-        progress.progress((x + 1) / number_of_symbols)
-    print('448', st.session_state.strats)
-    progress.empty()
-    st.success("✅ Backtests completed successfully!")
+#     fig = plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_configs, final_mask, entries, exits, symbol=symbol, period_str=period_str, interval_label=interval_label, custom_cols_config=st.session_state.get('custom_cols_config')) 
+#     st.plotly_chart(fig, use_container_width=True)
 
-for i in range(1, number_of_symbols, 4):
-    cols = st.columns(4)
-    for j, col in enumerate(cols):
-        page_num = i + j
-        if page_num <= number_of_symbols:
-            label = st.session_state.get(f"symbol_{page_num}_key", "ADANIENT")
-            if col.button(label, key=f"btn_{label}"):
-                st.session_state["current_page"] = label
-
-
-if "current_page" in st.session_state:
-    symbol = st.session_state.get("current_page")
-    print('463', symbol)
-    print('464', st.session_state.strats[symbol])
-    strat = st.session_state.strats[symbol]
-    data = st.session_state.data_store[symbol]
-    metrics, portfolio_values = get_detailed_metrics(strat)
-    metrics_df = pd.DataFrame({'metric':metrics.keys(), 'value': metrics.values()})
-    # st.markdown(metrics_df)
-    st.table(metrics_df)
-    figs = plot_strategy_metrics(metrics)
-    for fig in figs:
-        st.pyplot(fig)
-    entries = strat.entries 
-    exits = strat.exits
-    current_conds = strat.current_conditions 
-    entry_dates, entry_prices = [entry[0] for entry in entries], [entry[1] for entry in entries] 
-    cond_dates, cond_smas, cond_closes, cond_labels = [cond[0] for cond in current_conds], [cond[2] for cond in current_conds], [cond[1] for cond in current_conds], [cond[3] for cond in current_conds]
-    entries_df = pd.DataFrame({
-        'dt': entry_dates, 'price': entry_prices 
-    })
-    cond_df = pd.DataFrame({
-        'dt': cond_dates, 'sma': cond_smas, 'close': cond_closes, 'label': cond_labels
-    })
-        
-    fig = plot_charts_and_indicators_with_entry_exits(data, chart_interval, indicator_configs, final_mask, entries, exits, symbol=symbol, period_str=period_str, interval_label=interval_label, custom_cols_config=st.session_state.get('custom_cols_config')) 
-    st.plotly_chart(fig, use_container_width=True)
-
-    portfolio_values = portfolio_values.set_index("datetime")
-    portfolio_values.index = pd.to_datetime(portfolio_values.index)
-    # portfolio_values.drop(0)
-    plt.figure(figsize=(15, 12))
-    plt.plot(portfolio_values.index, portfolio_values["value"], label='Portfolio vs Time')
-    plt.xlabel('Datetime')
-    plt.ylabel('Value')
-    plt.title('Portfolio Value over Time')
-    plt.show()
+#     portfolio_values = portfolio_values.set_index("datetime")
+#     portfolio_values.index = pd.to_datetime(portfolio_values.index)
+#     # portfolio_values.drop(0)
+#     plt.figure(figsize=(15, 12))
+#     plt.plot(portfolio_values.index, portfolio_values["value"], label='Portfolio vs Time')
+#     plt.xlabel('Datetime')
+#     plt.ylabel('Value')
+#     plt.title('Portfolio Value over Time')
+#     plt.show()
 
         
                     
