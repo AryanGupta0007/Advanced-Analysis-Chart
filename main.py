@@ -601,7 +601,7 @@ for row in range(num_rows):
 
                 symbol = st.session_state[f"symbol_{i+1}_key"]
                 data = st.session_state.data_store[symbol]
-                final_mask = evaluate_conditions(data=data, computed_cols=st.session_state.computed_cols, cond_specs=st.session_state.cond_specs, connectors=st.session_state.connectors)
+                # final_mask = evaluate_conditions(data=data, computed_cols=st.session_state.computed_cols, cond_specs=st.session_state.cond_specs, connectors=st.session_state.connectors)
                                 
                 if st.session_state.get('strategy_type') == strategy_type_options[0]:
                     strat = st.session_state.strats[symbol]
